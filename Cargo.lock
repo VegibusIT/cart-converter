@@ -659,6 +659,8 @@ dependencies = [
  "eframe",
  "rfd",
  "rust_xlsxwriter",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
