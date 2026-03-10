@@ -117,6 +117,53 @@ fn setup_style(ctx: &egui::Context) {
     ctx.set_style(style);
 }
 
+/// ファイル/フォルダ選択行（パス表示 + 選択ボタン）→ クリック時trueを返す
+fn file_select_row(
+    ui: &mut egui::Ui,
+    display: &str,
+) -> bool {
+    let total_width = ui.available_width();
+    let btn_width = 56.0;
+    let path_width = total_width - btn_width - 12.0;
+    let mut clicked = false;
+
+    ui.horizontal(|ui| {
+        ui.set_max_width(total_width);
+        egui::Frame::default()
+            .fill(SURFACE)
+            .corner_radius(egui::CornerRadius::same(8))
+            .stroke(egui::Stroke::new(1.0, BORDER))
+            .inner_margin(egui::Margin::symmetric(10, 8))
+            .show(ui, |ui| {
+                ui.set_max_width(path_width - 24.0);
+                ui.set_min_width(path_width - 24.0);
+                let text = if display.is_empty() { "未選択" } else { display };
+                let color = if display.is_empty() { TEXT_SECONDARY } else { TEXT_PRIMARY };
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(text).size(13.0).color(color),
+                    )
+                    .truncate(),
+                );
+            });
+        if ui
+            .add_sized(
+                [btn_width, 32.0],
+                egui::Button::new(
+                    egui::RichText::new("選択").size(13.0).color(ACCENT),
+                )
+                .fill(SURFACE)
+                .stroke(egui::Stroke::new(1.0, BORDER))
+                .corner_radius(egui::CornerRadius::same(8)),
+            )
+            .clicked()
+        {
+            clicked = true;
+        }
+    });
+    clicked
+}
+
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -182,6 +229,7 @@ struct App {
     progress: f32,
     confirm_overwrite: bool,
     pending_output_dir: Option<PathBuf>,
+    completed_dir: Option<PathBuf>,
 }
 
 struct LogEntry {
@@ -301,52 +349,15 @@ impl eframe::App for App {
                         .color(TEXT_SECONDARY),
                 );
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    let display = self
-                        .product_path
-                        .as_ref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default();
-                    egui::Frame::default()
-                        .fill(SURFACE)
-                        .corner_radius(egui::CornerRadius::same(8))
-                        .stroke(egui::Stroke::new(1.0, BORDER))
-                        .inner_margin(egui::Margin::symmetric(12, 8))
-                        .show(ui, |ui| {
-                            ui.set_min_width(ui.available_width() - 72.0);
-                            if display.is_empty() {
-                                ui.label(
-                                    egui::RichText::new("未選択")
-                                        .size(13.0)
-                                        .color(TEXT_SECONDARY),
-                                );
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(&display)
-                                        .size(13.0)
-                                        .color(TEXT_PRIMARY),
-                                );
-                            }
-                        });
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("選択").size(13.0).color(ACCENT),
-                            )
-                            .fill(SURFACE)
-                            .stroke(egui::Stroke::new(1.0, BORDER))
-                            .corner_radius(egui::CornerRadius::same(8)),
-                        )
-                        .clicked()
+                let product_display = self.product_path.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+                if file_select_row(ui, &product_display) {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Excel", &["xlsx"])
+                        .pick_file()
                     {
-                        if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("Excel", &["xlsx"])
-                            .pick_file()
-                        {
-                            self.product_path = Some(path);
-                        }
+                        self.product_path = Some(path);
                     }
-                });
+                }
 
                 ui.add_space(16.0);
 
@@ -357,52 +368,15 @@ impl eframe::App for App {
                         .color(TEXT_SECONDARY),
                 );
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    let display = self
-                        .output_dir
-                        .as_ref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default();
-                    egui::Frame::default()
-                        .fill(SURFACE)
-                        .corner_radius(egui::CornerRadius::same(8))
-                        .stroke(egui::Stroke::new(1.0, BORDER))
-                        .inner_margin(egui::Margin::symmetric(12, 8))
-                        .show(ui, |ui| {
-                            ui.set_min_width(ui.available_width() - 72.0);
-                            if display.is_empty() {
-                                ui.label(
-                                    egui::RichText::new("未選択")
-                                        .size(13.0)
-                                        .color(TEXT_SECONDARY),
-                                );
-                            } else {
-                                ui.label(
-                                    egui::RichText::new(&display)
-                                        .size(13.0)
-                                        .color(TEXT_PRIMARY),
-                                );
-                            }
+                let output_display = self.output_dir.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+                if file_select_row(ui, &output_display) {
+                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                        self.output_dir = Some(path.clone());
+                        save_settings(&Settings {
+                            output_dir: Some(path.display().to_string()),
                         });
-                    if ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new("選択").size(13.0).color(ACCENT),
-                            )
-                            .fill(SURFACE)
-                            .stroke(egui::Stroke::new(1.0, BORDER))
-                            .corner_radius(egui::CornerRadius::same(8)),
-                        )
-                        .clicked()
-                    {
-                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                            self.output_dir = Some(path.clone());
-                            save_settings(&Settings {
-                                output_dir: Some(path.display().to_string()),
-                            });
-                        }
                     }
-                });
+                }
 
                 ui.add_space(28.0);
 
@@ -462,6 +436,30 @@ impl eframe::App for App {
                                 );
                             }
                         });
+                }
+
+                // フォルダを開くボタン
+                if let Some(dir) = &self.completed_dir {
+                    let dir = dir.clone();
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("出力フォルダを開く").size(13.0).color(ACCENT),
+                            )
+                            .fill(SURFACE)
+                            .stroke(egui::Stroke::new(1.0, BORDER))
+                            .corner_radius(egui::CornerRadius::same(8)),
+                        )
+                        .clicked()
+                    {
+                        #[cfg(target_os = "windows")]
+                        { let _ = std::process::Command::new("explorer").arg(&dir).spawn(); }
+                        #[cfg(target_os = "macos")]
+                        { let _ = std::process::Command::new("open").arg(&dir).spawn(); }
+                        #[cfg(target_os = "linux")]
+                        { let _ = std::process::Command::new("xdg-open").arg(&dir).spawn(); }
+                    }
                 }
             });
     }
@@ -540,6 +538,7 @@ impl App {
 
         self.log.clear();
         self.progress = 0.0;
+        self.completed_dir = None;
         self.log.push(LogEntry {
             text: format!("変換開始 → {}", output_dir.display()),
             kind: LogKind::Info,
@@ -563,6 +562,7 @@ impl App {
                     kind: LogKind::Done,
                 });
                 self.progress = 1.0;
+                self.completed_dir = Some(output_dir);
             }
             Err(e) => {
                 self.log.push(LogEntry {
