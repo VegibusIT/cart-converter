@@ -1,0 +1,10 @@
+[package]
+name = "cart-converter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+calamine = "0.26"
+rust_xlsxwriter = "0.82"
+eframe = "0.31"
+rfd = "0.15"
