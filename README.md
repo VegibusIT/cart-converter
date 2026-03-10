@@ -4,7 +4,7 @@
 
 ## デモ
 
-https://github.com/Ryujiyasu/cart-converter/releases/download/v1.0.0/demo.mp4
+![demo](demo.gif)
 
 ## ダウンロード
 
