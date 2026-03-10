@@ -121,7 +121,7 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("カート投入変換ツール")
-            .with_inner_size([520.0, 420.0])
+            .with_inner_size([520.0, 560.0])
             .with_resizable(false),
         ..Default::default()
     };

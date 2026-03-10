@@ -2,13 +2,11 @@
 
 やさいバスの商品リスト（Excel）から、店舗ごとのカート投入用Excelファイルを自動生成するデスクトップアプリです。
 
-## Windows版のダウンロード方法
+## Windows版のダウンロード
 
-1. このリポジトリの **[Actions](../../actions)** タブを開く
-2. 最新の **「Build Windows exe」** をクリック
-3. ページ下部の **Artifacts** から **`cart-converter-windows`** をダウンロード
-4. ZIPを解凍すると `cart-converter.exe` が入っています
-5. ダブルクリックで起動（インストール不要）
+**[Releases](../../releases/latest)** ページから `cart-converter.exe` をダウンロードしてください。
+
+ダブルクリックで起動できます（インストール不要）。
 
 > 初回起動時にWindows Defenderの警告が出る場合は「詳細情報」→「実行」をクリックしてください。
 
