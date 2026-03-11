@@ -1,4 +1,4 @@
-use calamine::{open_workbook, Reader, Xlsx};
+use calamine::{open_workbook, Dimensions, Reader, Xlsx};
 use rust_xlsxwriter::Workbook;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -174,6 +174,11 @@ fn read_store_sheet(
         .worksheet_range(sheet_name)
         .map_err(|e| format!("シート '{sheet_name}' を開けません: {e}"))?;
 
+    // 結合セル情報を取得
+    let merge_cells = wb.worksheet_merge_cells(sheet_name)
+        .and_then(|r| r.ok())
+        .unwrap_or_default();
+
     let id_col = column_name_to_index(&mapping.id_column)
         .ok_or_else(|| format!("無効な列名: {}", mapping.id_column))?;
     let lot_col = column_name_to_index(&mapping.lot_column)
@@ -185,7 +190,7 @@ fn read_store_sheet(
     let mut products = Vec::new();
 
     for row_idx in data_start..range.height() {
-        let id = match range.get_value((row_idx as u32, id_col)) {
+        let id = match get_value_merged(&range, &merge_cells, row_idx as u32, id_col) {
             Some(val) => {
                 let s = format_cell_value(val);
                 if s.is_empty() {
@@ -196,11 +201,17 @@ fn read_store_sheet(
             None => continue,
         };
 
-        let lot = get_numeric(&range, row_idx as u32, lot_col);
+        let lot = match get_value_merged(&range, &merge_cells, row_idx as u32, lot_col) {
+            Some(val) => data_to_numeric(val),
+            None => None,
+        };
 
         let mut daily_orders = vec![None; mapping.order_column_count as usize];
         for i in 0..mapping.order_column_count {
-            let val = get_numeric(&range, row_idx as u32, order_start + i);
+            let val = match get_value_merged(&range, &merge_cells, row_idx as u32, order_start + i) {
+                Some(v) => data_to_numeric(v),
+                None => None,
+            };
             if let Some(v) = val {
                 if v != 0.0 {
                     daily_orders[i as usize] = Some(v);
@@ -231,22 +242,48 @@ fn format_cell_value(val: &calamine::Data) -> String {
         }
         calamine::Data::String(s) => s.clone(),
         calamine::Data::Bool(b) => b.to_string(),
+        calamine::Data::DateTime(dt) => {
+            let days = dt.as_f64();
+            excel_days_to_md(days)
+        }
+        calamine::Data::DateTimeIso(s) => s.clone(),
+        calamine::Data::DurationIso(s) => s.clone(),
+        calamine::Data::Error(_) => String::new(),
         calamine::Data::Empty => String::new(),
-        _ => String::new(),
     }
 }
 
-/// 数値セルを取得
-fn get_numeric(
-    range: &calamine::Range<calamine::Data>,
-    row: u32,
-    col: u32,
-) -> Option<f64> {
-    match range.get_value((row, col))? {
+/// Data値を数値に変換（文字列の数値もパース）
+fn data_to_numeric(val: &calamine::Data) -> Option<f64> {
+    match val {
         calamine::Data::Float(f) => Some(*f),
         calamine::Data::Int(n) => Some(*n as f64),
+        calamine::Data::String(s) => s.trim().parse::<f64>().ok(),
         _ => None,
     }
+}
+
+/// 結合セルを考慮してセル値を取得
+/// セルが空で結合領域に含まれる場合、結合元（左上）の値を返す
+fn get_value_merged<'a>(
+    range: &'a calamine::Range<calamine::Data>,
+    merge_cells: &[Dimensions],
+    row: u32,
+    col: u32,
+) -> Option<&'a calamine::Data> {
+    let val = range.get_value((row, col));
+    if val.is_some() && !matches!(val, Some(calamine::Data::Empty)) {
+        return val;
+    }
+    // 結合領域に含まれるかチェック
+    for dim in merge_cells {
+        if row >= dim.start.0 && row <= dim.end.0
+            && col >= dim.start.1 && col <= dim.end.1
+        {
+            return range.get_value((dim.start.0, dim.start.1));
+        }
+    }
+    val
 }
 
 /// 商品リストの全シート名（店舗名）を取得
@@ -363,6 +400,9 @@ pub fn score_presets(
     let Ok(range) = wb.worksheet_range(&first_sheet) else {
         return scores;
     };
+    let merge_cells = wb.worksheet_merge_cells(&first_sheet)
+        .and_then(|r| r.ok())
+        .unwrap_or_default();
 
     for (idx, mapping) in presets.iter().enumerate() {
         let Some(id_col) = column_name_to_index(&mapping.id_column) else {
@@ -373,7 +413,7 @@ pub fn score_presets(
         let end = (data_start + 20).min(range.height());
         let mut count = 0usize;
         for row in data_start..end {
-            if let Some(val) = range.get_value((row as u32, id_col)) {
+            if let Some(val) = get_value_merged(&range, &merge_cells, row as u32, id_col) {
                 let s = format_cell_value(val);
                 if !s.is_empty() {
                     count += 1;
