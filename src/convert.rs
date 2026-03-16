@@ -145,10 +145,8 @@ fn unix_timestamp_to_ymd(ts: i64) -> (i32, u32, u32) {
     let days = (ts / 86400) as i32;
     // 2000-03-01を基準とした計算
     let y400 = 146097; // 400年の日数
-    let y100 = 36524;
-    let y4 = 1461;
 
-    let mut d = days + 719468; // 0000-03-01からの日数
+    let d = days + 719468; // 0000-03-01からの日数
     let era = if d >= 0 { d } else { d - y400 + 1 } / y400;
     let doe = (d - era * y400) as u32;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
