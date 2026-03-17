@@ -34,4 +34,5 @@ jobs:
         with:
           files: target/release/cart-converter.exe
           name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body: ""
+          draft: false
