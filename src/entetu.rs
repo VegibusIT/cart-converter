@@ -469,12 +469,23 @@ impl EnteTuPage {
                         self.show_auth_section(ui);
                     }
                     AuthState::WaitingForCallback => {
+                        // トークンが保存されたか定期チェック
+                        if let Some(token) = google_auth::load_token() {
+                            if google_auth::is_token_valid(&token) {
+                                self.auth_state = AuthState::Authenticated(token);
+                                // 次のフレームで再描画
+                                ui.ctx().request_repaint();
+                                return;
+                            }
+                        }
                         ui.label(
                             egui::RichText::new("ブラウザで認証を完了してください...")
                                 .size(13.0)
                                 .color(TEXT_SECONDARY),
                         );
                         ui.add_space(8.0);
+                        // 定期的に再描画してトークンチェック
+                        ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
                         ui.horizontal(|ui| {
                             ui.spinner();
                             ui.add_space(12.0);
@@ -623,15 +634,6 @@ impl EnteTuPage {
     }
 
     fn show_main_section(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        // WaitingForCallback後のリロード対策
-        if matches!(self.auth_state, AuthState::WaitingForCallback) {
-            if let Some(token) = google_auth::load_token() {
-                if google_auth::is_token_valid(&token) {
-                    self.auth_state = AuthState::Authenticated(token);
-                }
-            }
-        }
-
         // トークンリフレッシュ
         if let AuthState::Authenticated(ref token) = self.auth_state {
             if !google_auth::is_token_valid(token) {
