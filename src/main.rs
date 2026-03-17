@@ -29,6 +29,11 @@ struct App {
     releases_error: Option<String>,
     show_versions: bool,
     update_status: Option<String>,
+
+    // 更新通知
+    update_check_done: bool,
+    latest_version: Option<updater::ReleaseInfo>,
+    show_update_popup: bool,
 }
 
 impl Default for App {
@@ -42,6 +47,9 @@ impl Default for App {
             releases_error: None,
             show_versions: false,
             update_status: None,
+            update_check_done: false,
+            latest_version: None,
+            show_update_popup: false,
         }
     }
 }
@@ -94,6 +102,129 @@ fn main() -> eframe::Result {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 起動時に最新バージョンチェック（1回のみ）
+        if !self.update_check_done {
+            self.update_check_done = true;
+            if let Ok(releases) = updater::fetch_releases() {
+                if let Some(latest) = releases.first() {
+                    if !latest.is_current {
+                        self.latest_version = Some(latest.clone());
+                        self.show_update_popup = true;
+                    }
+                }
+                self.releases = releases;
+                self.releases_loaded = true;
+            }
+        }
+
+        // 更新通知ポップアップ
+        if self.show_update_popup {
+            if let Some(latest) = self.latest_version.clone() {
+                egui::Window::new("更新のお知らせ")
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                    .frame(
+                        egui::Frame::default()
+                            .fill(SURFACE)
+                            .corner_radius(egui::CornerRadius::same(14))
+                            .shadow(egui::epaint::Shadow {
+                                offset: [0, 4],
+                                blur: 20,
+                                spread: 0,
+                                color: egui::Color32::from_black_alpha(30),
+                            })
+                            .inner_margin(egui::Margin::same(24)),
+                    )
+                    .show(ctx, |ui| {
+                        ui.label(
+                            egui::RichText::new("新しいバージョンがあります")
+                                .size(15.0)
+                                .strong()
+                                .color(TEXT_PRIMARY),
+                        );
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "現在: v{}  →  最新: {}",
+                                updater::current_version(),
+                                latest.version
+                            ))
+                            .size(13.0)
+                            .color(TEXT_PRIMARY),
+                        );
+                        ui.add_space(8.0);
+
+                        // リリースノート
+                        if !latest.release_notes.is_empty() {
+                            egui::Frame::default()
+                                .fill(BG)
+                                .corner_radius(egui::CornerRadius::same(6))
+                                .stroke(egui::Stroke::new(1.0, BORDER))
+                                .inner_margin(egui::Margin::symmetric(12, 8))
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        egui::RichText::new(&latest.release_notes)
+                                            .size(12.0)
+                                            .color(TEXT_PRIMARY),
+                                    );
+                                });
+                        }
+                        ui.add_space(12.0);
+
+                        if let Some(status) = &self.update_status {
+                            ui.label(
+                                egui::RichText::new(status)
+                                    .size(12.0)
+                                    .color(ACCENT),
+                            );
+                            ui.add_space(8.0);
+                        }
+
+                        ui.horizontal(|ui| {
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new("今すぐ更新")
+                                            .color(egui::Color32::WHITE)
+                                            .size(13.0),
+                                    )
+                                    .fill(ACCENT)
+                                    .corner_radius(egui::CornerRadius::same(8)),
+                                )
+                                .clicked()
+                            {
+                                self.update_status = Some("ダウンロード中...".into());
+                                match updater::download_and_replace(&latest) {
+                                    Ok(exe_path) => {
+                                        updater::restart_app(&exe_path);
+                                    }
+                                    Err(e) => {
+                                        self.update_status = Some(format!("更新失敗: {e}"));
+                                    }
+                                }
+                            }
+                            ui.add_space(8.0);
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        egui::RichText::new("あとで")
+                                            .size(13.0)
+                                            .color(TEXT_SECONDARY),
+                                    )
+                                    .fill(SURFACE)
+                                    .stroke(egui::Stroke::new(1.0, BORDER))
+                                    .corner_radius(egui::CornerRadius::same(8)),
+                                )
+                                .clicked()
+                            {
+                                self.show_update_popup = false;
+                            }
+                        });
+                    });
+            }
+        }
+
         // ヘッダーバー
         egui::TopBottomPanel::top("header")
             .frame(

@@ -7,6 +7,7 @@ const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Deserialize, Clone, Debug)]
 struct GitHubRelease {
     tag_name: String,
+    body: Option<String>,
     assets: Vec<GitHubAsset>,
 }
 
@@ -21,6 +22,7 @@ pub struct ReleaseInfo {
     pub version: String,
     pub download_url: String,
     pub is_current: bool,
+    pub release_notes: String,
 }
 
 /// 現在のバージョンを返す
@@ -55,6 +57,7 @@ pub fn fetch_releases() -> Result<Vec<ReleaseInfo>, String> {
                 version: release.tag_name.clone(),
                 download_url: asset.browser_download_url.clone(),
                 is_current: release.tag_name == current,
+                release_notes: release.body.clone().unwrap_or_default(),
             });
         }
     }

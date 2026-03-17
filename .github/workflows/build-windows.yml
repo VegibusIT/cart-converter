@@ -34,7 +34,4 @@ jobs:
         with:
           files: target/release/cart-converter.exe
           name: ${{ github.ref_name }}
-          body: |
-            ## ダウンロード
-            下の `cart-converter.exe` をクリックしてダウンロードしてください。
-            ダブルクリックで起動できます（インストール不要）。
+          generate_release_notes: true
