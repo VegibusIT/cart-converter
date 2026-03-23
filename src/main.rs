@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod aeon;
 mod cart_converter;
 mod convert;
 mod entetu;
@@ -16,12 +17,14 @@ enum Page {
     Top,
     CartConverter,
     EnteTu,
+    Aeon,
 }
 
 struct App {
     page: Page,
     cart_converter: cart_converter::CartConverterPage,
     entetu: entetu::EnteTuPage,
+    aeon: aeon::AeonPage,
 
     // バージョン管理
     releases: Vec<updater::ReleaseInfo>,
@@ -42,6 +45,7 @@ impl Default for App {
             page: Page::Top,
             cart_converter: cart_converter::CartConverterPage::default(),
             entetu: entetu::EnteTuPage::default(),
+            aeon: aeon::AeonPage::default(),
             releases: Vec::new(),
             releases_loaded: false,
             releases_error: None,
@@ -278,6 +282,7 @@ impl eframe::App for App {
                         Page::Top => "ツール一覧",
                         Page::CartConverter => "カート投入変換ツール",
                         Page::EnteTu => "遠鉄ストア消化仕入れ",
+                        Page::Aeon => "イオン近畿 生鮮MD",
                     };
                     ui.label(
                         egui::RichText::new(subtitle)
@@ -297,6 +302,11 @@ impl eframe::App for App {
             }
             Page::EnteTu => {
                 if self.entetu.show(ctx) {
+                    self.page = Page::Top;
+                }
+            }
+            Page::Aeon => {
+                if self.aeon.show(ctx) {
                     self.page = Page::Top;
                 }
             }
@@ -353,6 +363,19 @@ impl App {
                     "Google Driveのメールデータをスプレッドシートに自動転記します",
                 ) {
                     self.page = Page::EnteTu;
+                }
+
+                ui.add_space(12.0);
+
+                // イオン近畿 生鮮MD
+                if self.show_tool_card(
+                    ui,
+                    ctx,
+                    card_width,
+                    "イオン近畿 生鮮MDアップロード",
+                    "商品リスト（Excel）から納品日別のアップロード用ファイルを生成します",
+                ) {
+                    self.page = Page::Aeon;
                 }
 
                 // バージョン管理セクション（画面下部）
