@@ -8,7 +8,7 @@ use crate::style::*;
 /// イオン近畿生鮮MDアップロード用レコード
 struct MdRecord {
     store_code: String,
-    delivery_date: String, // YYYY/M/D
+    delivery_date: String, // YYYY/MM/DD
     eos_code: String,
     product_name: String,
     quantity: u32,
@@ -166,7 +166,7 @@ fn read_aeon_excel(path: &std::path::Path) -> Result<Vec<MdRecord>, String> {
     Ok(records)
 }
 
-/// Excelシリアル値 → "YYYY/M/D" 文字列
+/// Excelシリアル値 → "YYYY/MM/DD" 文字列
 fn serial_to_date_string(serial: f64) -> String {
     let days = serial as i64;
     if days < 1 {
@@ -175,12 +175,12 @@ fn serial_to_date_string(serial: f64) -> String {
     // Excel serial → Unix days: Excel epoch 1899-12-30, serial 25569 = 1970-01-01
     let unix_days = days - 25569;
     let (y, m, d) = convert::unix_days_to_ymd(unix_days);
-    format!("{}/{}/{}", y, m, d)
+    format!("{}/{:02}/{:02}", y, m, d)
 }
 
 /// 日付文字列 → ファイル名用 "YYYYMMDD"
 fn date_to_filename(date_str: &str) -> String {
-    // "YYYY/M/D" → "YYYYMMDD"
+    // "YYYY/MM/DD" → "YYYYMMDD"
     let parts: Vec<&str> = date_str.split('/').collect();
     if parts.len() == 3 {
         format!(
