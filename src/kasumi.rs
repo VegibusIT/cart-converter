@@ -1,0 +1,532 @@
+use eframe::egui;
+use std::path::PathBuf;
+
+use crate::style::*;
+
+// --- SCMバーコード固定値 ---
+const SCM_PREFIX: &str = "5";          // 位置1: 物流識別コード
+const SCM_VENDOR: &str = "8934";       // 位置2-5: 納品業者番号
+const SCM_SUPPLIER: &str = "307270";   // 位置10-15: 取引先コード（やさいバス）
+const SCM_RESERVE: &str = "88";        // 位置16-17: 予備
+const SCM_SUFFIX: &str = "00810";      // 位置22-26: ルーティングコード
+
+/// 26桁SCMバーコードを生成
+fn build_scm_barcode(store_number: u32, seq: u32) -> String {
+    format!(
+        "{}{}{:04}{}{}{:04}{}",
+        SCM_PREFIX,
+        SCM_VENDOR,
+        store_number,
+        SCM_SUPPLIER,
+        SCM_RESERVE,
+        seq,
+        SCM_SUFFIX,
+    )
+}
+
+// --- 店舗マスター ---
+fn store_name(store_number: u32) -> &'static str {
+    match store_number {
+        5 => "龍ヶ丘",
+        27 => "湖北",
+        336 => "東茂原",
+        _ => "",
+    }
+}
+
+// --- 設定の永続化 ---
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct KasumiSettings {
+    output_dir: Option<String>,
+    store_number: u32,
+    next_seq: u32,
+    label_count: u32,
+    delivery_date: String,
+}
+
+impl Default for KasumiSettings {
+    fn default() -> Self {
+        Self {
+            output_dir: None,
+            store_number: 336,
+            next_seq: 1,
+            label_count: 1,
+            delivery_date: String::new(),
+        }
+    }
+}
+
+fn settings_path() -> PathBuf {
+    let base = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."))
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join("Library/Application Support"))
+            .unwrap_or_else(|| PathBuf::from("."))
+    } else {
+        std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join(".config"))
+            .unwrap_or_else(|| PathBuf::from("."))
+    };
+    base.join("cart-converter").join("kasumi-settings.json")
+}
+
+fn load_settings() -> KasumiSettings {
+    if let Ok(s) = std::fs::read_to_string(settings_path()) {
+        serde_json::from_str(&s).unwrap_or_default()
+    } else {
+        KasumiSettings::default()
+    }
+}
+
+fn save_settings(settings: &KasumiSettings) {
+    if let Some(parent) = settings_path().parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(settings) {
+        let _ = std::fs::write(settings_path(), json);
+    }
+}
+
+// --- Excel出力 ---
+
+fn generate_scm_excel(
+    output_dir: &std::path::Path,
+    store_number: u32,
+    start_seq: u32,
+    count: u32,
+    delivery_date: &str,
+) -> Result<(PathBuf, u32), String> {
+    use rust_xlsxwriter::*;
+
+    let name = store_name(store_number);
+    let store_display = if name.is_empty() {
+        format!("{:04}", store_number)
+    } else {
+        format!("{:04}_{}", store_number, name)
+    };
+    let filename = format!("SCMラベル_{}.xlsx", store_display);
+    let filepath = output_dir.join(&filename);
+
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+    worksheet.set_name("SCMラベル").map_err(|e| format!("シート名設定エラー: {e}"))?;
+
+    // 列幅設定
+    worksheet.set_column_width(0, 4).map_err(|e| format!("{e}"))?;   // A: 番号
+    worksheet.set_column_width(1, 40).map_err(|e| format!("{e}"))?;  // B: データ
+    worksheet.set_column_width(2, 15).map_err(|e| format!("{e}"))?;  // C: 補助
+
+    // フォーマット定義
+    let fmt_title = Format::new()
+        .set_font_name("HGP創英角ｺﾞｼｯｸUB")
+        .set_font_size(16)
+        .set_bold();
+
+    let fmt_info = Format::new()
+        .set_font_name("游ゴシック")
+        .set_font_size(12)
+        .set_bold();
+
+    let fmt_detail = Format::new()
+        .set_font_name("游ゴシック")
+        .set_font_size(11);
+
+    let fmt_barcode = Format::new()
+        .set_font_name("やさいバス")
+        .set_font_size(11);
+
+    let fmt_num = Format::new()
+        .set_font_name("游ゴシック")
+        .set_font_size(11);
+
+    let end_seq = start_seq + count;
+    let mut row: u32 = 0;
+
+    for seq in start_seq..end_seq {
+        let barcode = build_scm_barcode(store_number, seq);
+        let store_name_str = store_name(store_number);
+        let store_label = if store_name_str.is_empty() {
+            format!("店番: {:04}", store_number)
+        } else {
+            format!("店番: {:04}  {}", store_number, store_name_str)
+        };
+
+        // 行1: やさいバス
+        worksheet.write_with_format(row, 0, (seq - start_seq + 1) as f64, &fmt_num)
+            .map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(row, 1, "やさいバス", &fmt_title)
+            .map_err(|e| format!("{e}"))?;
+        row += 1;
+
+        // 行2: カスミ佐倉流通センター　冷蔵　野菜
+        worksheet.write_with_format(row, 1, "カスミ佐倉流通センター　冷蔵　野菜", &fmt_info)
+            .map_err(|e| format!("{e}"))?;
+        row += 1;
+
+        // 行3: 店番・店名（＋納品日があれば）
+        let line3 = if delivery_date.is_empty() {
+            store_label
+        } else {
+            format!("{}　納品日: {}", store_label, delivery_date)
+        };
+        worksheet.write_with_format(row, 1, &line3, &fmt_detail)
+            .map_err(|e| format!("{e}"))?;
+        row += 1;
+
+        // 行4: バーコード（「やさいバス」フォント）
+        worksheet.write_with_format(row, 1, &barcode, &fmt_barcode)
+            .map_err(|e| format!("{e}"))?;
+        row += 1;
+    }
+
+    // 印刷範囲設定
+    worksheet.set_print_area(0, 0, row - 1, 2)
+        .map_err(|e| format!("印刷範囲設定エラー: {e}"))?;
+
+    workbook.save(&filepath).map_err(|e| format!("Excel保存エラー: {e}"))?;
+
+    Ok((filepath, end_seq))
+}
+
+// --- UI ---
+
+pub struct KasumiPage {
+    output_dir: Option<PathBuf>,
+    store_number_input: String,
+    store_number: u32,
+    next_seq: u32,
+    label_count_input: String,
+    label_count: u32,
+    delivery_date: String,
+    log: Vec<LogEntry>,
+    is_done: bool,
+}
+
+impl Default for KasumiPage {
+    fn default() -> Self {
+        let settings = load_settings();
+        Self {
+            output_dir: settings.output_dir.map(PathBuf::from),
+            store_number_input: format!("{}", settings.store_number),
+            store_number: settings.store_number,
+            next_seq: settings.next_seq,
+            label_count_input: format!("{}", settings.label_count),
+            label_count: settings.label_count,
+            delivery_date: settings.delivery_date,
+            log: Vec::new(),
+            is_done: false,
+        }
+    }
+}
+
+impl KasumiPage {
+    pub fn show(&mut self, ctx: &egui::Context) -> bool {
+        let go_back = false;
+
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::default()
+                    .fill(BG)
+                    .inner_margin(egui::Margin::symmetric(32, 28)),
+            )
+            .show(ctx, |ui| {
+                ui.add_space(12.0);
+
+                ui.label(
+                    egui::RichText::new("カスミ SCMラベル発行")
+                        .size(18.0)
+                        .strong()
+                        .color(TEXT_PRIMARY),
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(
+                        "カスミ佐倉流通センター納品用の26桁SCMバーコードラベルを生成します",
+                    )
+                    .size(12.0)
+                    .color(TEXT_SECONDARY),
+                );
+                ui.add_space(20.0);
+
+                // 出力フォルダ選択
+                ui.label(
+                    egui::RichText::new("出力先フォルダ")
+                        .size(13.0)
+                        .strong()
+                        .color(TEXT_PRIMARY),
+                );
+                ui.add_space(4.0);
+                let output_display = self
+                    .output_dir
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if file_select_row(ui, &output_display) {
+                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                        self.output_dir = Some(path);
+                        self.save();
+                    }
+                }
+
+                ui.add_space(16.0);
+
+                // 店舗番号
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("店舗番号")
+                            .size(13.0)
+                            .strong()
+                            .color(TEXT_PRIMARY),
+                    );
+                    ui.add_space(8.0);
+                    let response = ui.add_sized(
+                        [80.0, 28.0],
+                        egui::TextEdit::singleline(&mut self.store_number_input)
+                            .font(egui::TextStyle::Body),
+                    );
+                    if response.changed() {
+                        if let Ok(n) = self.store_number_input.trim().parse::<u32>() {
+                            self.store_number = n;
+                            self.save();
+                        }
+                    }
+                    // 店名表示
+                    let name = store_name(self.store_number);
+                    if !name.is_empty() {
+                        ui.add_space(8.0);
+                        ui.label(
+                            egui::RichText::new(name)
+                                .size(13.0)
+                                .color(ACCENT),
+                        );
+                    }
+                });
+
+                ui.add_space(12.0);
+
+                // 発行枚数
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("発行枚数")
+                            .size(13.0)
+                            .strong()
+                            .color(TEXT_PRIMARY),
+                    );
+                    ui.add_space(8.0);
+                    let response = ui.add_sized(
+                        [80.0, 28.0],
+                        egui::TextEdit::singleline(&mut self.label_count_input)
+                            .font(egui::TextStyle::Body),
+                    );
+                    if response.changed() {
+                        if let Ok(n) = self.label_count_input.trim().parse::<u32>() {
+                            if n > 0 {
+                                self.label_count = n;
+                                self.save();
+                            }
+                        }
+                    }
+                    ui.label(
+                        egui::RichText::new("枚")
+                            .size(13.0)
+                            .color(TEXT_PRIMARY),
+                    );
+                });
+
+                ui.add_space(12.0);
+
+                // 納品日（任意）
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("納品日")
+                            .size(13.0)
+                            .strong()
+                            .color(TEXT_PRIMARY),
+                    );
+                    ui.add_space(20.0);
+                    let response = ui.add_sized(
+                        [140.0, 28.0],
+                        egui::TextEdit::singleline(&mut self.delivery_date)
+                            .hint_text("例: 3/28")
+                            .font(egui::TextStyle::Body),
+                    );
+                    if response.changed() {
+                        self.save();
+                    }
+                    ui.label(
+                        egui::RichText::new("（任意）")
+                            .size(11.0)
+                            .color(TEXT_SECONDARY),
+                    );
+                });
+
+                ui.add_space(12.0);
+
+                // 連番情報
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("次の連番: {}", self.next_seq))
+                            .size(12.0)
+                            .color(TEXT_SECONDARY),
+                    );
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("リセット")
+                                    .size(11.0)
+                                    .color(ERROR),
+                            )
+                            .fill(SURFACE)
+                            .stroke(egui::Stroke::new(1.0, BORDER))
+                            .corner_radius(egui::CornerRadius::same(4)),
+                        )
+                        .clicked()
+                    {
+                        self.next_seq = 1;
+                        self.save();
+                    }
+                });
+
+                // バーコードプレビュー
+                ui.add_space(8.0);
+                let preview = build_scm_barcode(self.store_number, self.next_seq);
+                ui.label(
+                    egui::RichText::new(format!("プレビュー: {}", preview))
+                        .size(11.0)
+                        .color(TEXT_SECONDARY),
+                );
+
+                ui.add_space(20.0);
+
+                // 発行ボタン
+                let can_run = self.output_dir.is_some() && self.label_count > 0;
+                let btn = ui.add_sized(
+                    [ui.available_width(), 40.0],
+                    egui::Button::new(
+                        egui::RichText::new("ラベル発行")
+                            .size(14.0)
+                            .strong()
+                            .color(if can_run {
+                                egui::Color32::WHITE
+                            } else {
+                                TEXT_SECONDARY
+                            }),
+                    )
+                    .fill(if can_run { ACCENT } else { BORDER })
+                    .corner_radius(egui::CornerRadius::same(10)),
+                );
+
+                if btn.clicked() && can_run {
+                    self.run_generation();
+                }
+
+                ui.add_space(16.0);
+
+                // ログ表示
+                show_log(ui, &self.log);
+
+                // 完了時：出力フォルダを開くボタン
+                if self.is_done {
+                    ui.add_space(8.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("出力フォルダを開く")
+                                    .size(13.0)
+                                    .color(ACCENT),
+                            )
+                            .fill(SURFACE)
+                            .stroke(egui::Stroke::new(1.0, BORDER))
+                            .corner_radius(egui::CornerRadius::same(8)),
+                        )
+                        .clicked()
+                    {
+                        if let Some(dir) = &self.output_dir {
+                            let _ = open::that(dir);
+                        }
+                    }
+                }
+            });
+
+        go_back
+    }
+
+    fn run_generation(&mut self) {
+        self.log.clear();
+        self.is_done = false;
+
+        let output_dir = self.output_dir.as_ref().unwrap();
+
+        self.log.push(LogEntry {
+            text: format!(
+                "店舗: {:04} {}  枚数: {}  連番: {}〜{}",
+                self.store_number,
+                store_name(self.store_number),
+                self.label_count,
+                self.next_seq,
+                self.next_seq + self.label_count - 1,
+            ),
+            kind: LogKind::Info,
+        });
+
+        match generate_scm_excel(
+            output_dir,
+            self.store_number,
+            self.next_seq,
+            self.label_count,
+            &self.delivery_date,
+        ) {
+            Ok((filepath, new_next_seq)) => {
+                self.log.push(LogEntry {
+                    text: format!(
+                        "出力: {}",
+                        filepath.file_name().unwrap_or_default().to_string_lossy()
+                    ),
+                    kind: LogKind::Ok,
+                });
+
+                let preview_start = build_scm_barcode(self.store_number, self.next_seq);
+                let preview_end = build_scm_barcode(self.store_number, new_next_seq - 1);
+                self.log.push(LogEntry {
+                    text: format!("バーコード: {} 〜 {}", preview_start, preview_end),
+                    kind: LogKind::Info,
+                });
+
+                // 連番を更新して保存
+                self.next_seq = new_next_seq;
+                self.save();
+
+                self.log.push(LogEntry {
+                    text: format!(
+                        "完了: {}枚のラベルを生成しました（次の連番: {}）",
+                        self.label_count, self.next_seq
+                    ),
+                    kind: LogKind::Done,
+                });
+                self.is_done = true;
+            }
+            Err(e) => {
+                self.log.push(LogEntry {
+                    text: format!("エラー: {e}"),
+                    kind: LogKind::Error,
+                });
+            }
+        }
+    }
+
+    fn save(&self) {
+        let settings = KasumiSettings {
+            output_dir: self.output_dir.as_ref().map(|p| p.to_string_lossy().to_string()),
+            store_number: self.store_number,
+            next_seq: self.next_seq,
+            label_count: self.label_count,
+            delivery_date: self.delivery_date.clone(),
+        };
+        save_settings(&settings);
+    }
+}

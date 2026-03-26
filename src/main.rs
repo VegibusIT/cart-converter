@@ -6,6 +6,7 @@ mod cart_converter;
 mod convert;
 mod entetu;
 mod google_auth;
+mod kasumi;
 mod style;
 mod updater;
 
@@ -18,6 +19,7 @@ enum Page {
     CartConverter,
     EnteTu,
     Aeon,
+    Kasumi,
 }
 
 struct App {
@@ -25,6 +27,7 @@ struct App {
     cart_converter: cart_converter::CartConverterPage,
     entetu: entetu::EnteTuPage,
     aeon: aeon::AeonPage,
+    kasumi: kasumi::KasumiPage,
 
     // バージョン管理
     releases: Vec<updater::ReleaseInfo>,
@@ -46,6 +49,7 @@ impl Default for App {
             cart_converter: cart_converter::CartConverterPage::default(),
             entetu: entetu::EnteTuPage::default(),
             aeon: aeon::AeonPage::default(),
+            kasumi: kasumi::KasumiPage::default(),
             releases: Vec::new(),
             releases_loaded: false,
             releases_error: None,
@@ -283,6 +287,7 @@ impl eframe::App for App {
                         Page::CartConverter => "カート投入変換ツール",
                         Page::EnteTu => "遠鉄ストア消化仕入れ",
                         Page::Aeon => "イオン近畿 生鮮MD",
+                        Page::Kasumi => "カスミ SCMラベル",
                     };
                     ui.label(
                         egui::RichText::new(subtitle)
@@ -307,6 +312,11 @@ impl eframe::App for App {
             }
             Page::Aeon => {
                 if self.aeon.show(ctx) {
+                    self.page = Page::Top;
+                }
+            }
+            Page::Kasumi => {
+                if self.kasumi.show(ctx) {
                     self.page = Page::Top;
                 }
             }
@@ -376,6 +386,19 @@ impl App {
                     "商品リスト（Excel）から納品日別のアップロード用ファイルを生成します",
                 ) {
                     self.page = Page::Aeon;
+                }
+
+                ui.add_space(12.0);
+
+                // カスミ SCMラベル
+                if self.show_tool_card(
+                    ui,
+                    ctx,
+                    card_width,
+                    "カスミ SCMラベル発行",
+                    "カスミ佐倉流通センター納品用の26桁SCMバーコードラベルを生成します",
+                ) {
+                    self.page = Page::Kasumi;
                 }
 
                 // バージョン管理セクション（画面下部）
