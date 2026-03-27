@@ -202,19 +202,6 @@ fn generate_scm_excel(
     let filepath = output_dir.join(&filename);
 
     let mut workbook = Workbook::new();
-    let worksheet = workbook.add_worksheet();
-    worksheet.set_name("SCMラベル").map_err(|e| format!("シート名設定エラー: {e}"))?;
-
-    // --- ページ設定（30×50mmラベル用） ---
-    // 余白を全て0に
-    worksheet.set_margins(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-    worksheet.set_header("");
-    worksheet.set_footer("");
-    // 横向き（50mm幅 × 30mm高さ）
-    worksheet.set_landscape();
-
-    // 列幅設定: A列のみ使用（50mm ≈ 25文字幅）
-    worksheet.set_column_width(0, 25).map_err(|e| format!("{e}"))?;
 
     // フォーマット定義（コンパクトサイズ）
     let fmt_title = Format::new()
@@ -232,14 +219,12 @@ fn generate_scm_excel(
         .set_align(FormatAlign::Center);
 
     // 行の高さ（30mm ≈ 85pt を4行で配分）
-    let row_height_title: f64 = 16.0;   // 行1: タイトル＋納品先
-    let row_height_info: f64 = 12.0;    // 行2: 店番＋納品日
-    let row_height_barcode: f64 = 45.0; // 行3: バーコード画像
-    let row_height_text: f64 = 12.0;    // 行4: バーコード番号
+    let row_height_title: f64 = 16.0;
+    let row_height_info: f64 = 12.0;
+    let row_height_barcode: f64 = 45.0;
+    let row_height_text: f64 = 12.0;
 
     let end_seq = start_seq + count;
-    let mut row: u32 = 0;
-    let mut page_breaks: Vec<u32> = Vec::new();
 
     for seq in start_seq..end_seq {
         let barcode = build_scm_barcode(store_number, seq);
@@ -250,11 +235,23 @@ fn generate_scm_excel(
             format!("店番:{:04} {}", store_number, store_name_str)
         };
 
+        // --- 1ラベル = 1シート ---
+        let sheet_name = format!("{}", seq);
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name(&sheet_name).map_err(|e| format!("シート名設定エラー: {e}"))?;
+
+        // ページ設定（30×50mmラベル用）
+        worksheet.set_margins(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        worksheet.set_header("");
+        worksheet.set_footer("");
+        worksheet.set_landscape();
+        worksheet.set_column_width(0, 25).map_err(|e| format!("{e}"))?;
+        worksheet.set_print_area(0, 0, 3, 0).map_err(|e| format!("{e}"))?;
+
         // 行1: やさいバス　カスミ佐倉流通センター 冷蔵 野菜
-        worksheet.set_row_height(row, row_height_title).map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(row, 0, "やさいバス カスミ佐倉流通センター 冷蔵 野菜", &fmt_title)
+        worksheet.set_row_height(0, row_height_title).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(0, 0, "やさいバス カスミ佐倉流通センター 冷蔵 野菜", &fmt_title)
             .map_err(|e| format!("{e}"))?;
-        row += 1;
 
         // 行2: 店番・店名（＋納品日）
         let line2 = if delivery_date.is_empty() {
@@ -262,10 +259,9 @@ fn generate_scm_excel(
         } else {
             format!("{} 納品日:{}", store_label, delivery_date)
         };
-        worksheet.set_row_height(row, row_height_info).map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(row, 0, &line2, &fmt_info)
+        worksheet.set_row_height(1, row_height_info).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(1, 0, &line2, &fmt_info)
             .map_err(|e| format!("{e}"))?;
-        row += 1;
 
         // 行3: ITFバーコード画像
         let png_data = generate_itf_png(&barcode)
@@ -273,30 +269,15 @@ fn generate_scm_excel(
         let barcode_image = Image::new_from_buffer(&png_data)
             .map_err(|e| format!("画像読込エラー: {e}"))?
             .set_scale_to_size(180.0, 40.0, false);
-        worksheet.set_row_height(row, row_height_barcode).map_err(|e| format!("{e}"))?;
-        worksheet.insert_image(row, 0, &barcode_image)
+        worksheet.set_row_height(2, row_height_barcode).map_err(|e| format!("{e}"))?;
+        worksheet.insert_image(2, 0, &barcode_image)
             .map_err(|e| format!("画像挿入エラー: {e}"))?;
-        row += 1;
 
         // 行4: バーコード番号（人間可読テキスト）
-        worksheet.set_row_height(row, row_height_text).map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(row, 0, &barcode, &fmt_barcode_text)
+        worksheet.set_row_height(3, row_height_text).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(3, 0, &barcode, &fmt_barcode_text)
             .map_err(|e| format!("{e}"))?;
-        row += 1;
-
-        // ラベル間にページ区切りを追加（最後のラベル以外）
-        if seq < end_seq - 1 {
-            page_breaks.push(row);
-        }
     }
-
-    // ページ区切り設定（1ラベル=1ページ）
-    worksheet.set_page_breaks(&page_breaks)
-        .map_err(|e| format!("ページ区切り設定エラー: {e}"))?;
-
-    // 印刷範囲設定
-    worksheet.set_print_area(0, 0, row - 1, 0)
-        .map_err(|e| format!("印刷範囲設定エラー: {e}"))?;
 
     workbook.save(&filepath).map_err(|e| format!("Excel保存エラー: {e}"))?;
 
