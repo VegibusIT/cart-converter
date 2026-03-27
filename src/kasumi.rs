@@ -3,6 +3,96 @@ use std::path::PathBuf;
 
 use crate::style::*;
 
+// --- ITFバーコード画像生成 ---
+
+/// ITF (Interleaved 2 of 5) バーコードをPNG画像としてメモリ上に生成する
+fn generate_itf_png(data: &str) -> Result<Vec<u8>, String> {
+    // 偶数桁チェック
+    if data.len() % 2 != 0 {
+        return Err("ITFバーコードは偶数桁が必要です".to_string());
+    }
+
+    let digits: Vec<usize> = data
+        .chars()
+        .map(|c| {
+            c.to_digit(10)
+                .ok_or_else(|| format!("不正な文字: {c}"))
+                .map(|d| d as usize)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // ITF 2-of-5 パターン (false=narrow, true=wide)
+    const PATTERNS: [[bool; 5]; 10] = [
+        [false, false, true, true, false],  // 0: NNWWN
+        [true, false, false, false, true],   // 1: WNNNE
+        [false, true, false, false, true],   // 2: NWNNW
+        [true, true, false, false, false],   // 3: WWNNN
+        [false, false, true, false, true],   // 4: NNWNW
+        [true, false, true, false, false],   // 5: WNWNN
+        [false, true, true, false, false],   // 6: NWWNN
+        [false, false, false, true, true],   // 7: NNNWW
+        [true, false, false, true, false],   // 8: WNNWN
+        [false, true, false, true, false],   // 9: NWNWN
+    ];
+
+    let narrow = 2u32;
+    let wide = 5u32;
+    let bar_height = 80u32;
+    let quiet_zone = 20u32; // 左右の余白
+
+    // バー列を構築: (is_bar, width)
+    let mut bars: Vec<(bool, u32)> = Vec::new();
+
+    // スタートパターン: narrow bar, narrow space, narrow bar, narrow space
+    bars.push((true, narrow));
+    bars.push((false, narrow));
+    bars.push((true, narrow));
+    bars.push((false, narrow));
+
+    // データペア
+    for pair in digits.chunks(2) {
+        let d1 = pair[0];
+        let d2 = pair[1];
+        for i in 0..5 {
+            bars.push((true, if PATTERNS[d1][i] { wide } else { narrow }));
+            bars.push((false, if PATTERNS[d2][i] { wide } else { narrow }));
+        }
+    }
+
+    // エンドパターン: wide bar, narrow space, narrow bar
+    bars.push((true, wide));
+    bars.push((false, narrow));
+    bars.push((true, narrow));
+
+    let barcode_width: u32 = bars.iter().map(|(_, w)| *w).sum();
+    let total_width = barcode_width + quiet_zone * 2;
+    let total_height = bar_height;
+
+    // 画像生成（白背景）
+    let mut img = image::GrayImage::from_pixel(total_width, total_height, image::Luma([255u8]));
+
+    // バーを描画
+    let mut x = quiet_zone;
+    for (is_bar, width) in &bars {
+        if *is_bar {
+            for dx in 0..*width {
+                for y in 0..bar_height {
+                    img.put_pixel(x + dx, y, image::Luma([0u8]));
+                }
+            }
+        }
+        x += width;
+    }
+
+    // PNGエンコード
+    let mut buf = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageLuma8(img)
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .map_err(|e| format!("PNG生成エラー: {e}"))?;
+
+    Ok(buf.into_inner())
+}
+
 // --- SCMバーコード固定値 ---
 const SCM_PREFIX: &str = "5";          // 位置1: 物流識別コード
 const SCM_VENDOR: &str = "8934";       // 位置2-5: 納品業者番号
@@ -115,76 +205,97 @@ fn generate_scm_excel(
     let worksheet = workbook.add_worksheet();
     worksheet.set_name("SCMラベル").map_err(|e| format!("シート名設定エラー: {e}"))?;
 
-    // 列幅設定
-    worksheet.set_column_width(0, 4).map_err(|e| format!("{e}"))?;   // A: 番号
-    worksheet.set_column_width(1, 40).map_err(|e| format!("{e}"))?;  // B: データ
-    worksheet.set_column_width(2, 15).map_err(|e| format!("{e}"))?;  // C: 補助
+    // --- ページ設定（30×50mmラベル用） ---
+    // 余白を全て0に
+    worksheet.set_margins(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    worksheet.set_header("");
+    worksheet.set_footer("");
+    // 横向き（50mm幅 × 30mm高さ）
+    worksheet.set_landscape();
 
-    // フォーマット定義
+    // 列幅設定: A列のみ使用（50mm ≈ 25文字幅）
+    worksheet.set_column_width(0, 25).map_err(|e| format!("{e}"))?;
+
+    // フォーマット定義（コンパクトサイズ）
     let fmt_title = Format::new()
-        .set_font_name("HGP創英角ｺﾞｼｯｸUB")
-        .set_font_size(16)
+        .set_font_name("游ゴシック")
+        .set_font_size(9)
         .set_bold();
 
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(12)
-        .set_bold();
+        .set_font_size(7);
 
-    let fmt_detail = Format::new()
+    let fmt_barcode_text = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(11);
+        .set_font_size(7)
+        .set_align(FormatAlign::Center);
 
-    let fmt_barcode = Format::new()
-        .set_font_name("やさいバス")
-        .set_font_size(11);
-
-    let fmt_num = Format::new()
-        .set_font_name("游ゴシック")
-        .set_font_size(11);
+    // 行の高さ（30mm ≈ 85pt を4行で配分）
+    let row_height_title: f64 = 16.0;   // 行1: タイトル＋納品先
+    let row_height_info: f64 = 12.0;    // 行2: 店番＋納品日
+    let row_height_barcode: f64 = 45.0; // 行3: バーコード画像
+    let row_height_text: f64 = 12.0;    // 行4: バーコード番号
 
     let end_seq = start_seq + count;
     let mut row: u32 = 0;
+    let mut page_breaks: Vec<u32> = Vec::new();
 
     for seq in start_seq..end_seq {
         let barcode = build_scm_barcode(store_number, seq);
         let store_name_str = store_name(store_number);
         let store_label = if store_name_str.is_empty() {
-            format!("店番: {:04}", store_number)
+            format!("店番:{:04}", store_number)
         } else {
-            format!("店番: {:04}  {}", store_number, store_name_str)
+            format!("店番:{:04} {}", store_number, store_name_str)
         };
 
-        // 行1: やさいバス
-        worksheet.write_with_format(row, 0, (seq - start_seq + 1) as f64, &fmt_num)
-            .map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(row, 1, "やさいバス", &fmt_title)
-            .map_err(|e| format!("{e}"))?;
-        row += 1;
-
-        // 行2: カスミ佐倉流通センター　冷蔵　野菜
-        worksheet.write_with_format(row, 1, "カスミ佐倉流通センター　冷蔵　野菜", &fmt_info)
+        // 行1: やさいバス　カスミ佐倉流通センター 冷蔵 野菜
+        worksheet.set_row_height(row, row_height_title).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(row, 0, "やさいバス カスミ佐倉流通センター 冷蔵 野菜", &fmt_title)
             .map_err(|e| format!("{e}"))?;
         row += 1;
 
-        // 行3: 店番・店名（＋納品日があれば）
-        let line3 = if delivery_date.is_empty() {
+        // 行2: 店番・店名（＋納品日）
+        let line2 = if delivery_date.is_empty() {
             store_label
         } else {
-            format!("{}　納品日: {}", store_label, delivery_date)
+            format!("{} 納品日:{}", store_label, delivery_date)
         };
-        worksheet.write_with_format(row, 1, &line3, &fmt_detail)
+        worksheet.set_row_height(row, row_height_info).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(row, 0, &line2, &fmt_info)
             .map_err(|e| format!("{e}"))?;
         row += 1;
 
-        // 行4: バーコード（「やさいバス」フォント）
-        worksheet.write_with_format(row, 1, &barcode, &fmt_barcode)
+        // 行3: ITFバーコード画像
+        let png_data = generate_itf_png(&barcode)
+            .map_err(|e| format!("バーコード生成エラー: {e}"))?;
+        let barcode_image = Image::new_from_buffer(&png_data)
+            .map_err(|e| format!("画像読込エラー: {e}"))?
+            .set_scale_to_size(180.0, 40.0, false);
+        worksheet.set_row_height(row, row_height_barcode).map_err(|e| format!("{e}"))?;
+        worksheet.insert_image(row, 0, &barcode_image)
+            .map_err(|e| format!("画像挿入エラー: {e}"))?;
+        row += 1;
+
+        // 行4: バーコード番号（人間可読テキスト）
+        worksheet.set_row_height(row, row_height_text).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(row, 0, &barcode, &fmt_barcode_text)
             .map_err(|e| format!("{e}"))?;
         row += 1;
+
+        // ラベル間にページ区切りを追加（最後のラベル以外）
+        if seq < end_seq - 1 {
+            page_breaks.push(row);
+        }
     }
 
+    // ページ区切り設定（1ラベル=1ページ）
+    worksheet.set_page_breaks(&page_breaks)
+        .map_err(|e| format!("ページ区切り設定エラー: {e}"))?;
+
     // 印刷範囲設定
-    worksheet.set_print_area(0, 0, row - 1, 2)
+    worksheet.set_print_area(0, 0, row - 1, 0)
         .map_err(|e| format!("印刷範囲設定エラー: {e}"))?;
 
     workbook.save(&filepath).map_err(|e| format!("Excel保存エラー: {e}"))?;

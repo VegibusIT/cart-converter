@@ -659,11 +659,12 @@ dependencies = [
 
 [[package]]
 name = "cart-converter"
-version = "2.2.0"
+version = "2.2.1"
 dependencies = [
  "calamine",
  "eframe",
  "encoding_rs",
+ "image",
  "open",
  "rfd",
  "rust_xlsxwriter",

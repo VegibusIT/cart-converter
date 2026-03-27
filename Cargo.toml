@@ -1,6 +1,6 @@
 [package]
 name = "cart-converter"
-version = "2.2.0"
+version = "2.2.1"
 edition = "2021"
 
 [dependencies]
@@ -14,3 +14,4 @@ ureq = { version = "2", features = ["json"] }
 urlencoding = "2"
 open = "5"
 encoding_rs = "0.8"
+image = { version = "0.25", default-features = false, features = ["png"] }
