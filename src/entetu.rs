@@ -853,11 +853,15 @@ impl EnteTuPage {
                 self.files = xlsx_files
                     .into_iter()
                     .map(|f| {
-                        let transferred = self.transferred_ids.contains(&f.id)
-                            || is_already_transferred(&f.name, &existing_dates);
-                        // ローカル記録にない既存データもIDを追加しておく
-                        if transferred && !self.transferred_ids.contains(&f.id) {
+                        // Sheetに日付データが存在する場合のみ転記済みとする
+                        // （Sheetからデータを削除すれば再転記可能）
+                        let in_sheet = is_already_transferred(&f.name, &existing_dates);
+                        let transferred = in_sheet;
+                        // ローカル記録をSheetの実態に合わせて同期
+                        if in_sheet && !self.transferred_ids.contains(&f.id) {
                             self.transferred_ids.insert(f.id.clone());
+                        } else if !in_sheet && self.transferred_ids.contains(&f.id) {
+                            self.transferred_ids.remove(&f.id);
                         }
                         DisplayFile { file: f, transferred, selected: false }
                     })
