@@ -133,6 +133,8 @@ struct KasumiSettings {
     next_seq: u32,
     label_count: u32,
     delivery_date: String,
+    #[serde(default)]
+    printer_name: String,
 }
 
 impl Default for KasumiSettings {
@@ -143,6 +145,7 @@ impl Default for KasumiSettings {
             next_seq: 1,
             label_count: 1,
             delivery_date: String::new(),
+            printer_name: String::new(),
         }
     }
 }
@@ -179,6 +182,99 @@ fn save_settings(settings: &KasumiSettings) {
     if let Ok(json) = serde_json::to_string_pretty(settings) {
         let _ = std::fs::write(settings_path(), json);
     }
+}
+
+// --- SBPL直接印刷 ---
+
+/// SATO SBPL コマンドで1枚分のラベルデータを生成
+/// L'esprit V-ex 用 (30×50mm, 203dpi)
+fn build_sbpl_label(
+    barcode: &str,
+    store_number: u32,
+    delivery_date: &str,
+) -> Vec<u8> {
+    let store_name_str = store_name(store_number);
+    let store_label = if store_name_str.is_empty() {
+        format!("店番:{:04}", store_number)
+    } else {
+        format!("店番:{:04} {}", store_number, store_name_str)
+    };
+
+    let line1 = "やさいバス カスミ佐倉流通センター 冷蔵 野菜";
+    let line2 = if delivery_date.is_empty() {
+        store_label.clone()
+    } else {
+        format!("{} 納品日:{}", store_label, delivery_date)
+    };
+
+    // Shift-JIS エンコード（SATOプリンター標準）
+    let (line1_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(line1);
+    let (line2_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(&line2);
+
+    let mut cmd: Vec<u8> = Vec::new();
+    let esc: u8 = 0x1B;
+
+    // ラベル開始
+    cmd.push(esc);
+    cmd.push(b'A');
+
+    // 行1: タイトル + 納品先 (Y=15, X=10)
+    cmd.push(esc); cmd.extend_from_slice(b"V0015");
+    cmd.push(esc); cmd.extend_from_slice(b"H0010");
+    cmd.push(esc); cmd.extend_from_slice(b"L0201");  // ゴシック 横倍
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.extend_from_slice(&line1_bytes);
+    cmd.push(0x0D);
+
+    // 行2: 店番・店名・納品日 (Y=55, X=10)
+    cmd.push(esc); cmd.extend_from_slice(b"V0055");
+    cmd.push(esc); cmd.extend_from_slice(b"H0010");
+    cmd.push(esc); cmd.extend_from_slice(b"L0101");  // ゴシック 標準
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.extend_from_slice(&line2_bytes);
+    cmd.push(0x0D);
+
+    // 行3: ITFバーコード (Y=90, X=20)
+    // BD: バーコード描画 03=ITF, 02=ナロー幅, 06=ワイド/ナロー比, 0080=高さ80dot
+    cmd.push(esc); cmd.extend_from_slice(b"V0090");
+    cmd.push(esc); cmd.extend_from_slice(b"H0020");
+    cmd.push(esc); cmd.extend_from_slice(b"BD030206008000");
+    cmd.extend_from_slice(barcode.as_bytes());
+    cmd.push(0x0D);
+
+    // 行4: バーコード番号 (Y=185, X=30)
+    cmd.push(esc); cmd.extend_from_slice(b"V0185");
+    cmd.push(esc); cmd.extend_from_slice(b"H0030");
+    cmd.push(esc); cmd.extend_from_slice(b"L0101");
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.extend_from_slice(barcode.as_bytes());
+    cmd.push(0x0D);
+
+    // 印刷枚数=1, ラベル終了
+    cmd.push(esc); cmd.extend_from_slice(b"Q0001");
+    cmd.push(esc);
+    cmd.push(b'Z');
+
+    cmd
+}
+
+/// 複数ラベルをSBPLで直接印刷
+fn print_sbpl_labels(
+    printer_name: &str,
+    store_number: u32,
+    start_seq: u32,
+    count: u32,
+    delivery_date: &str,
+) -> Result<u32, String> {
+    let end_seq = start_seq + count;
+
+    for seq in start_seq..end_seq {
+        let barcode = build_scm_barcode(store_number, seq);
+        let sbpl = build_sbpl_label(&barcode, store_number, delivery_date);
+        crate::printer::print_raw(printer_name, &sbpl)?;
+    }
+
+    Ok(end_seq)
 }
 
 // --- Excel出力 ---
@@ -296,11 +392,22 @@ pub struct KasumiPage {
     delivery_date: String,
     log: Vec<LogEntry>,
     is_done: bool,
+    // プリンター関連
+    printers: Vec<String>,
+    selected_printer: String,
 }
 
 impl Default for KasumiPage {
     fn default() -> Self {
         let settings = load_settings();
+        let printers = crate::printer::list_printers();
+        let selected_printer = if !settings.printer_name.is_empty()
+            && printers.contains(&settings.printer_name)
+        {
+            settings.printer_name.clone()
+        } else {
+            printers.first().cloned().unwrap_or_default()
+        };
         Self {
             output_dir: settings.output_dir.map(PathBuf::from),
             store_number_input: format!("{}", settings.store_number),
@@ -311,6 +418,8 @@ impl Default for KasumiPage {
             delivery_date: settings.delivery_date,
             log: Vec::new(),
             is_done: false,
+            printers,
+            selected_printer,
         }
     }
 }
@@ -458,6 +567,45 @@ impl KasumiPage {
 
                 ui.add_space(12.0);
 
+                // プリンター選択
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("プリンター")
+                            .size(13.0)
+                            .strong()
+                            .color(TEXT_PRIMARY),
+                    );
+                    ui.add_space(2.0);
+                    let current = self.selected_printer.clone();
+                    egui::ComboBox::from_id_salt("printer_combo")
+                        .selected_text(if current.is_empty() { "(未選択)" } else { &current })
+                        .width(200.0)
+                        .show_ui(ui, |ui| {
+                            for p in &self.printers {
+                                if ui.selectable_label(self.selected_printer == *p, p).clicked() {
+                                    self.selected_printer = p.clone();
+                                    self.save();
+                                }
+                            }
+                        });
+                    // 更新ボタン
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("↻").size(13.0).color(ACCENT),
+                            )
+                            .fill(SURFACE)
+                            .stroke(egui::Stroke::new(1.0, BORDER))
+                            .corner_radius(egui::CornerRadius::same(4)),
+                        )
+                        .clicked()
+                    {
+                        self.printers = crate::printer::list_printers();
+                    }
+                });
+
+                ui.add_space(12.0);
+
                 // 連番情報
                 ui.horizontal(|ui| {
                     ui.label(
@@ -495,27 +643,46 @@ impl KasumiPage {
 
                 ui.add_space(20.0);
 
-                // 発行ボタン
-                let can_run = self.output_dir.is_some() && self.label_count > 0;
-                let btn = ui.add_sized(
-                    [ui.available_width(), 40.0],
-                    egui::Button::new(
-                        egui::RichText::new("ラベル発行")
-                            .size(14.0)
-                            .strong()
-                            .color(if can_run {
-                                egui::Color32::WHITE
-                            } else {
-                                TEXT_SECONDARY
-                            }),
-                    )
-                    .fill(if can_run { ACCENT } else { BORDER })
-                    .corner_radius(egui::CornerRadius::same(10)),
-                );
+                // 発行ボタン（2つ横並び）
+                let can_excel = self.output_dir.is_some() && self.label_count > 0;
+                let can_print = !self.selected_printer.is_empty() && self.label_count > 0;
 
-                if btn.clicked() && can_run {
-                    self.run_generation();
-                }
+                ui.horizontal(|ui| {
+                    let half_width = (ui.available_width() - 8.0) / 2.0;
+
+                    // Excel出力ボタン
+                    let btn_excel = ui.add_sized(
+                        [half_width, 40.0],
+                        egui::Button::new(
+                            egui::RichText::new("Excel出力")
+                                .size(14.0)
+                                .strong()
+                                .color(if can_excel { egui::Color32::WHITE } else { TEXT_SECONDARY }),
+                        )
+                        .fill(if can_excel { ACCENT } else { BORDER })
+                        .corner_radius(egui::CornerRadius::same(10)),
+                    );
+                    if btn_excel.clicked() && can_excel {
+                        self.run_generation();
+                    }
+
+                    // 直接印刷ボタン
+                    let print_color = egui::Color32::from_rgb(30, 80, 160);
+                    let btn_print = ui.add_sized(
+                        [half_width, 40.0],
+                        egui::Button::new(
+                            egui::RichText::new("直接印刷")
+                                .size(14.0)
+                                .strong()
+                                .color(if can_print { egui::Color32::WHITE } else { TEXT_SECONDARY }),
+                        )
+                        .fill(if can_print { print_color } else { BORDER })
+                        .corner_radius(egui::CornerRadius::same(10)),
+                    );
+                    if btn_print.clicked() && can_print {
+                        self.run_direct_print();
+                    }
+                });
 
                 ui.add_space(16.0);
 
@@ -611,6 +778,59 @@ impl KasumiPage {
         }
     }
 
+    fn run_direct_print(&mut self) {
+        self.log.clear();
+        self.is_done = false;
+
+        self.log.push(LogEntry {
+            text: format!(
+                "直接印刷: {} → 店舗:{:04} {}  枚数:{}  連番:{}〜{}",
+                self.selected_printer,
+                self.store_number,
+                store_name(self.store_number),
+                self.label_count,
+                self.next_seq,
+                self.next_seq + self.label_count - 1,
+            ),
+            kind: LogKind::Info,
+        });
+
+        match print_sbpl_labels(
+            &self.selected_printer,
+            self.store_number,
+            self.next_seq,
+            self.label_count,
+            &self.delivery_date,
+        ) {
+            Ok(new_next_seq) => {
+                let preview_start = build_scm_barcode(self.store_number, self.next_seq);
+                let preview_end = build_scm_barcode(self.store_number, new_next_seq - 1);
+                self.log.push(LogEntry {
+                    text: format!("バーコード: {} 〜 {}", preview_start, preview_end),
+                    kind: LogKind::Info,
+                });
+
+                self.next_seq = new_next_seq;
+                self.save();
+
+                self.log.push(LogEntry {
+                    text: format!(
+                        "印刷完了: {}枚（次の連番: {}）",
+                        self.label_count, self.next_seq
+                    ),
+                    kind: LogKind::Done,
+                });
+                self.is_done = true;
+            }
+            Err(e) => {
+                self.log.push(LogEntry {
+                    text: format!("印刷エラー: {e}"),
+                    kind: LogKind::Error,
+                });
+            }
+        }
+    }
+
     fn save(&self) {
         let settings = KasumiSettings {
             output_dir: self.output_dir.as_ref().map(|p| p.to_string_lossy().to_string()),
@@ -618,6 +838,7 @@ impl KasumiPage {
             next_seq: self.next_seq,
             label_count: self.label_count,
             delivery_date: self.delivery_date.clone(),
+            printer_name: self.selected_printer.clone(),
         };
         save_settings(&settings);
     }

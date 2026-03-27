@@ -7,6 +7,7 @@ mod convert;
 mod entetu;
 mod google_auth;
 mod kasumi;
+mod printer;
 mod style;
 mod updater;
 
