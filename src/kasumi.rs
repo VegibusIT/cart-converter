@@ -187,7 +187,8 @@ fn save_settings(settings: &KasumiSettings) {
 // --- SBPL直接印刷 ---
 
 /// SATO SBPL コマンドで1枚分のラベルデータを生成
-/// L'esprit V-ex 用 (30×50mm, 203dpi)
+/// SATO Lesprit412v 用 (50×30mm, 305dpi)
+/// 305dpi: 50mm≈600dot, 30mm≈360dot
 fn build_sbpl_label(
     barcode: &str,
     store_number: u32,
@@ -218,33 +219,33 @@ fn build_sbpl_label(
     cmd.push(esc);
     cmd.push(b'A');
 
-    // 行1: タイトル + 納品先 (Y=15, X=10)
-    cmd.push(esc); cmd.extend_from_slice(b"V0015");
-    cmd.push(esc); cmd.extend_from_slice(b"H0010");
+    // 行1: タイトル + 納品先 (Y=20, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0020");
+    cmd.push(esc); cmd.extend_from_slice(b"H0015");
     cmd.push(esc); cmd.extend_from_slice(b"L0201");  // ゴシック 横倍
     cmd.push(esc); cmd.extend_from_slice(b"RH00");
     cmd.extend_from_slice(&line1_bytes);
     cmd.push(0x0D);
 
-    // 行2: 店番・店名・納品日 (Y=55, X=10)
-    cmd.push(esc); cmd.extend_from_slice(b"V0055");
-    cmd.push(esc); cmd.extend_from_slice(b"H0010");
+    // 行2: 店番・店名・納品日 (Y=80, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0080");
+    cmd.push(esc); cmd.extend_from_slice(b"H0015");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");  // ゴシック 標準
     cmd.push(esc); cmd.extend_from_slice(b"RH00");
     cmd.extend_from_slice(&line2_bytes);
     cmd.push(0x0D);
 
-    // 行3: ITFバーコード (Y=90, X=20)
-    // BD: バーコード描画 03=ITF, 02=ナロー幅, 06=ワイド/ナロー比, 0080=高さ80dot
-    cmd.push(esc); cmd.extend_from_slice(b"V0090");
-    cmd.push(esc); cmd.extend_from_slice(b"H0020");
-    cmd.push(esc); cmd.extend_from_slice(b"BD030206008000");
+    // 行3: ITFバーコード (Y=130, X=30)
+    // BD: バーコード描画 03=ITF, 03=ナロー幅, 06=ワイド/ナロー比, 0120=高さ120dot
+    cmd.push(esc); cmd.extend_from_slice(b"V0130");
+    cmd.push(esc); cmd.extend_from_slice(b"H0030");
+    cmd.push(esc); cmd.extend_from_slice(b"BD030306012000");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
-    // 行4: バーコード番号 (Y=185, X=30)
-    cmd.push(esc); cmd.extend_from_slice(b"V0185");
-    cmd.push(esc); cmd.extend_from_slice(b"H0030");
+    // 行4: バーコード番号 (Y=270, X=050)
+    cmd.push(esc); cmd.extend_from_slice(b"V0270");
+    cmd.push(esc); cmd.extend_from_slice(b"H0050");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");
     cmd.push(esc); cmd.extend_from_slice(b"RH00");
     cmd.extend_from_slice(barcode.as_bytes());
