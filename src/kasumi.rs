@@ -225,47 +225,57 @@ fn build_sbpl_label(
     // ラベル開始
     cmd.push(esc); cmd.push(b'A');
 
-    // 行1: やさいバス (Y=15, X=15)
+    // Shift-JIS漢字コード設定
+    cmd.push(esc); cmd.extend_from_slice(b"KC1");
+
+    // 回転なし
+    cmd.push(esc); cmd.extend_from_slice(b"%0");
+
+    // 行1: やさいバス (Y=15, X=15) — 24x24漢字、横2倍
     cmd.push(esc); cmd.extend_from_slice(b"V0015");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"P02");
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.push(esc); cmd.extend_from_slice(b"P00");
+    cmd.push(esc); cmd.extend_from_slice(b"L0201");
+    cmd.push(esc); cmd.extend_from_slice(b"K2");
     cmd.extend_from_slice(&line1_bytes);
     cmd.push(0x0D);
 
-    // 行1b: カスミ佐倉流通センター 冷蔵 野菜 (Y=40, X=15)
-    cmd.push(esc); cmd.extend_from_slice(b"V0040");
+    // 行1b: カスミ佐倉流通センター 冷蔵 野菜 (Y=50, X=15) — 16x16漢字
+    cmd.push(esc); cmd.extend_from_slice(b"V0050");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"P01");
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.push(esc); cmd.extend_from_slice(b"P00");
+    cmd.push(esc); cmd.extend_from_slice(b"L0101");
+    cmd.push(esc); cmd.extend_from_slice(b"K1");
     cmd.extend_from_slice(&line1b_bytes);
     cmd.push(0x0D);
 
-    // 行2: 店番・店名・納品日 (Y=70, X=15)
-    cmd.push(esc); cmd.extend_from_slice(b"V0070");
+    // 行2: 店番・店名・納品日 (Y=75, X=15) — 16x16漢字
+    cmd.push(esc); cmd.extend_from_slice(b"V0075");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"P01");
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.push(esc); cmd.extend_from_slice(b"P00");
+    cmd.push(esc); cmd.extend_from_slice(b"L0101");
+    cmd.push(esc); cmd.extend_from_slice(b"K1");
     cmd.extend_from_slice(&line2_bytes);
     cmd.push(0x0D);
 
-    // 行3: ITFバーコード (Y=100, X=020)
+    // 行3: ITFバーコード (Y=100, X=020) — 比率1:3, ナロー3dot, 高さ120dot
     cmd.push(esc); cmd.extend_from_slice(b"V0100");
     cmd.push(esc); cmd.extend_from_slice(b"H0020");
-    cmd.push(esc); cmd.extend_from_slice(b"BD030306012000");
+    cmd.push(esc); cmd.extend_from_slice(b"B203120");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
-    // 行4: バーコード番号 (Y=250, X=040)
-    cmd.push(esc); cmd.extend_from_slice(b"V0250");
+    // 行4: バーコード番号 (Y=240, X=040) — ASCII
+    cmd.push(esc); cmd.extend_from_slice(b"V0240");
     cmd.push(esc); cmd.extend_from_slice(b"H0040");
-    cmd.push(esc); cmd.extend_from_slice(b"P01");
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.push(esc); cmd.extend_from_slice(b"P00");
+    cmd.push(esc); cmd.extend_from_slice(b"L0101");
+    cmd.push(esc); cmd.extend_from_slice(b"K1");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
     // 印刷枚数=1, ラベル終了
-    cmd.push(esc); cmd.extend_from_slice(b"Q0001");
+    cmd.push(esc); cmd.extend_from_slice(b"Q1");
     cmd.push(esc); cmd.push(b'Z');
 
     // ETX フレーム終了
