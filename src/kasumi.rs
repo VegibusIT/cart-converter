@@ -201,7 +201,8 @@ fn build_sbpl_label(
         format!("店番:{:04} {}", store_number, store_name_str)
     };
 
-    let line1 = "やさいバス カスミ佐倉流通センター 冷蔵 野菜";
+    let line1 = "やさいバス";
+    let line1b = "カスミ佐倉流通センター 冷蔵 野菜";
     let line2 = if delivery_date.is_empty() {
         store_label.clone()
     } else {
@@ -210,6 +211,7 @@ fn build_sbpl_label(
 
     // Shift-JIS エンコード（SATOプリンター標準）
     let (line1_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(line1);
+    let (line1b_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(line1b);
     let (line2_bytes, _, _) = encoding_rs::SHIFT_JIS.encode(&line2);
 
     let mut cmd: Vec<u8> = Vec::new();
@@ -223,38 +225,50 @@ fn build_sbpl_label(
     // ラベル開始
     cmd.push(esc); cmd.push(b'A');
 
-    // 印刷速度・濃度の初期化
-    cmd.push(esc); cmd.extend_from_slice(b"CS03");  // 速度3
-    cmd.push(esc); cmd.extend_from_slice(b"#E");    // 濃度デフォルト
+    // 漢字コード = Shift-JIS
+    cmd.push(esc); cmd.extend_from_slice(b"KC2");
 
-    // 行1: タイトル + 納品先 (Y=20, X=15)
-    cmd.push(esc); cmd.extend_from_slice(b"V0020");
+    // 行1: やさいバス (Y=15, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0015");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"$B,");  // 漢字モード
-    cmd.push(esc); cmd.extend_from_slice(b"X22,");  // ビットマップフォント 22dot
+    cmd.push(esc); cmd.extend_from_slice(b"P02");
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
     cmd.extend_from_slice(&line1_bytes);
+    cmd.push(0x0D);
+
+    // 行1b: カスミ佐倉流通センター 冷蔵 野菜 (Y=40, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0040");
+    cmd.push(esc); cmd.extend_from_slice(b"H0015");
+    cmd.push(esc); cmd.extend_from_slice(b"P01");
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.extend_from_slice(&line1b_bytes);
     cmd.push(0x0D);
 
     // 行2: 店番・店名・納品日 (Y=70, X=15)
     cmd.push(esc); cmd.extend_from_slice(b"V0070");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"$B,");
-    cmd.push(esc); cmd.extend_from_slice(b"X20,");  // 20dot
+    cmd.push(esc); cmd.extend_from_slice(b"P01");
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
     cmd.extend_from_slice(&line2_bytes);
     cmd.push(0x0D);
 
-    // 行3: ITFバーコード (Y=110, X=020)
-    // BG: バーコード描画 (新形式)
-    // 03=ITF, S=標準, 03=ナロー幅, 03=ワイド幅, 100=高さ, +0000000000=補正, B=下にHRI
-    cmd.push(esc); cmd.extend_from_slice(b"V0110");
+    // 行3: ITFバーコード (Y=100, X=020)
+    cmd.push(esc); cmd.extend_from_slice(b"V0100");
     cmd.push(esc); cmd.extend_from_slice(b"H0020");
-    cmd.push(esc);
-    cmd.extend_from_slice(
-        format!("BG03,S,03,03,0100,+0000000000,B,00,{}\x0D", barcode).as_bytes()
-    );
+    cmd.push(esc); cmd.extend_from_slice(b"BD030306012000");
+    cmd.extend_from_slice(barcode.as_bytes());
+    cmd.push(0x0D);
+
+    // 行4: バーコード番号 (Y=250, X=040)
+    cmd.push(esc); cmd.extend_from_slice(b"V0250");
+    cmd.push(esc); cmd.extend_from_slice(b"H0040");
+    cmd.push(esc); cmd.extend_from_slice(b"P01");
+    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.extend_from_slice(barcode.as_bytes());
+    cmd.push(0x0D);
 
     // 印刷枚数=1, ラベル終了
-    cmd.push(esc); cmd.extend_from_slice(b"Q1");
+    cmd.push(esc); cmd.extend_from_slice(b"Q0001");
     cmd.push(esc); cmd.push(b'Z');
 
     // ETX フレーム終了
