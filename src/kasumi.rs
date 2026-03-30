@@ -214,47 +214,51 @@ fn build_sbpl_label(
 
     let mut cmd: Vec<u8> = Vec::new();
     let esc: u8 = 0x1B;
+    let stx: u8 = 0x02;
+    let etx: u8 = 0x03;
+
+    // STX フレーム開始
+    cmd.push(stx);
 
     // ラベル開始
-    cmd.push(esc);
-    cmd.push(b'A');
+    cmd.push(esc); cmd.push(b'A');
+
+    // 印刷速度・濃度の初期化
+    cmd.push(esc); cmd.extend_from_slice(b"CS03");  // 速度3
+    cmd.push(esc); cmd.extend_from_slice(b"#E");    // 濃度デフォルト
 
     // 行1: タイトル + 納品先 (Y=20, X=15)
     cmd.push(esc); cmd.extend_from_slice(b"V0020");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"L0201");  // ゴシック 横倍
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.push(esc); cmd.extend_from_slice(b"$B,");  // 漢字モード
+    cmd.push(esc); cmd.extend_from_slice(b"X22,");  // ビットマップフォント 22dot
     cmd.extend_from_slice(&line1_bytes);
     cmd.push(0x0D);
 
-    // 行2: 店番・店名・納品日 (Y=80, X=15)
-    cmd.push(esc); cmd.extend_from_slice(b"V0080");
+    // 行2: 店番・店名・納品日 (Y=70, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0070");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"L0101");  // ゴシック 標準
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
+    cmd.push(esc); cmd.extend_from_slice(b"$B,");
+    cmd.push(esc); cmd.extend_from_slice(b"X20,");  // 20dot
     cmd.extend_from_slice(&line2_bytes);
     cmd.push(0x0D);
 
-    // 行3: ITFバーコード (Y=130, X=30)
-    // BD: バーコード描画 03=ITF, 03=ナロー幅, 06=ワイド/ナロー比, 0120=高さ120dot
-    cmd.push(esc); cmd.extend_from_slice(b"V0130");
-    cmd.push(esc); cmd.extend_from_slice(b"H0030");
-    cmd.push(esc); cmd.extend_from_slice(b"BD030306012000");
-    cmd.extend_from_slice(barcode.as_bytes());
-    cmd.push(0x0D);
-
-    // 行4: バーコード番号 (Y=270, X=050)
-    cmd.push(esc); cmd.extend_from_slice(b"V0270");
-    cmd.push(esc); cmd.extend_from_slice(b"H0050");
-    cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"RH00");
-    cmd.extend_from_slice(barcode.as_bytes());
-    cmd.push(0x0D);
+    // 行3: ITFバーコード (Y=110, X=020)
+    // BG: バーコード描画 (新形式)
+    // 03=ITF, S=標準, 03=ナロー幅, 03=ワイド幅, 100=高さ, +0000000000=補正, B=下にHRI
+    cmd.push(esc); cmd.extend_from_slice(b"V0110");
+    cmd.push(esc); cmd.extend_from_slice(b"H0020");
+    cmd.push(esc);
+    cmd.extend_from_slice(
+        format!("BG03,S,03,03,0100,+0000000000,B,00,{}\x0D", barcode).as_bytes()
+    );
 
     // 印刷枚数=1, ラベル終了
-    cmd.push(esc); cmd.extend_from_slice(b"Q0001");
-    cmd.push(esc);
-    cmd.push(b'Z');
+    cmd.push(esc); cmd.extend_from_slice(b"Q1");
+    cmd.push(esc); cmd.push(b'Z');
+
+    // ETX フレーム終了
+    cmd.push(etx);
 
     cmd
 }
