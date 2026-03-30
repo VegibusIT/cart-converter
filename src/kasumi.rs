@@ -341,7 +341,7 @@ fn generate_scm_excel(
         worksheet.set_margins(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         worksheet.set_header("");
         worksheet.set_footer("");
-        worksheet.set_landscape();
+        worksheet.set_portrait();
         worksheet.set_column_width(0, 25).map_err(|e| format!("{e}"))?;
         worksheet.set_print_area(0, 0, 3, 0).map_err(|e| format!("{e}"))?;
 
