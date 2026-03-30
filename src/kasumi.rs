@@ -225,48 +225,34 @@ fn build_sbpl_label(
     // ラベル開始
     cmd.push(esc); cmd.push(b'A');
 
-    // Shift-JIS漢字コード設定
-    cmd.push(esc); cmd.extend_from_slice(b"KC1");
-
-    // 回転なし
-    cmd.push(esc); cmd.extend_from_slice(b"%0");
-
-    // 行1: やさいバス (Y=15, X=15) — 24x24漢字+1バイト文字対応
+    // 行1: "yasai-bus" テスト (Y=15, X=15) — ASCIIフォントで確認
     cmd.push(esc); cmd.extend_from_slice(b"V0015");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"L0201");
-    cmd.push(esc); cmd.extend_from_slice(b"K9");
-    cmd.extend_from_slice(&line1_bytes);
+    cmd.push(esc); cmd.extend_from_slice(b"L0202");
+    cmd.push(esc); cmd.extend_from_slice(b"XM");
+    cmd.extend_from_slice(b"yasai-bus");
     cmd.push(0x0D);
 
-    // 行1b: カスミ佐倉流通センター 冷蔵 野菜 (Y=55, X=15)
+    // 行2: 店番 ASCII (Y=055, X=15)
     cmd.push(esc); cmd.extend_from_slice(b"V0055");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"K8");
-    cmd.extend_from_slice(&line1b_bytes);
+    cmd.push(esc); cmd.extend_from_slice(b"XS");
+    cmd.extend_from_slice(format!("Store:{:04}", store_number).as_bytes());
     cmd.push(0x0D);
 
-    // 行2: 店番・店名・納品日 (Y=80, X=15)
+    // 行3: ITFバーコード (Y=080, X=020)
     cmd.push(esc); cmd.extend_from_slice(b"V0080");
-    cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"K8");
-    cmd.extend_from_slice(&line2_bytes);
-    cmd.push(0x0D);
-
-    // 行3: ITFバーコード (Y=105, X=020)
-    cmd.push(esc); cmd.extend_from_slice(b"V0105");
     cmd.push(esc); cmd.extend_from_slice(b"H0020");
     cmd.push(esc); cmd.extend_from_slice(b"B203120");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
-    // 行4: バーコード番号 (Y=240, X=040)
-    cmd.push(esc); cmd.extend_from_slice(b"V0240");
-    cmd.push(esc); cmd.extend_from_slice(b"H0040");
+    // 行4: バーコード番号 (Y=220, X=030)
+    cmd.push(esc); cmd.extend_from_slice(b"V0220");
+    cmd.push(esc); cmd.extend_from_slice(b"H0030");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"K8");
+    cmd.push(esc); cmd.extend_from_slice(b"XS");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
