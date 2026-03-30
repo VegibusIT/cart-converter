@@ -300,26 +300,26 @@ fn generate_scm_excel(
 
     let mut workbook = Workbook::new();
 
-    // フォーマット定義（コンパクトサイズ）
+    // フォーマット定義（30×50mmラベル用コンパクトサイズ）
     let fmt_title = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(9)
+        .set_font_size(7)
         .set_bold();
 
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(7);
+        .set_font_size(6);
 
     let fmt_barcode_text = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(7)
+        .set_font_size(6)
         .set_align(FormatAlign::Center);
 
     // 行の高さ（30mm ≈ 85pt を4行で配分）
-    let row_height_title: f64 = 16.0;
-    let row_height_info: f64 = 12.0;
-    let row_height_barcode: f64 = 45.0;
-    let row_height_text: f64 = 12.0;
+    let row_height_title: f64 = 13.0;
+    let row_height_info: f64 = 10.0;
+    let row_height_barcode: f64 = 50.0;
+    let row_height_text: f64 = 10.0;
 
     let end_seq = start_seq + count;
 
@@ -343,7 +343,7 @@ fn generate_scm_excel(
         worksheet.set_footer("");
         worksheet.set_portrait();
         worksheet.set_print_fit_to_pages(1, 1); // 1ページに収める
-        worksheet.set_column_width(0, 25).map_err(|e| format!("{e}"))?;
+        worksheet.set_column_width(0, 22).map_err(|e| format!("{e}"))?;
         worksheet.set_print_area(0, 0, 3, 0).map_err(|e| format!("{e}"))?;
 
         // 行1: やさいバス　カスミ佐倉流通センター 冷蔵 野菜
