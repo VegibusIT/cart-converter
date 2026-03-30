@@ -225,34 +225,23 @@ fn build_sbpl_label(
     // ラベル開始
     cmd.push(esc); cmd.push(b'A');
 
-    // 行1: "yasai-bus" テスト (Y=15, X=15) — ASCIIフォントで確認
+    // テスト: 最小限のコマンドでテキスト表示確認
+    // 行1: テスト文字 (Y=15, X=15)
     cmd.push(esc); cmd.extend_from_slice(b"V0015");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"L0202");
-    cmd.push(esc); cmd.extend_from_slice(b"XM");
-    cmd.extend_from_slice(b"yasai-bus");
+    cmd.extend_from_slice(b"TEST12345");
     cmd.push(0x0D);
 
-    // 行2: 店番 ASCII (Y=055, X=15)
-    cmd.push(esc); cmd.extend_from_slice(b"V0055");
-    cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"XS");
-    cmd.extend_from_slice(format!("Store:{:04}", store_number).as_bytes());
-    cmd.push(0x0D);
-
-    // 行3: ITFバーコード (Y=080, X=020)
-    cmd.push(esc); cmd.extend_from_slice(b"V0080");
+    // 行2: ITFバーコード (Y=060, X=020)
+    cmd.push(esc); cmd.extend_from_slice(b"V0060");
     cmd.push(esc); cmd.extend_from_slice(b"H0020");
     cmd.push(esc); cmd.extend_from_slice(b"B203120");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
-    // 行4: バーコード番号 (Y=220, X=030)
-    cmd.push(esc); cmd.extend_from_slice(b"V0220");
+    // 行3: バーコード番号 (Y=200, X=030)
+    cmd.push(esc); cmd.extend_from_slice(b"V0200");
     cmd.push(esc); cmd.extend_from_slice(b"H0030");
-    cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"XS");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
