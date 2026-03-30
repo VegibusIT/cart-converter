@@ -303,8 +303,12 @@ fn generate_scm_excel(
     // フォーマット定義（30×50mmラベル用コンパクトサイズ）
     let fmt_title = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(7)
+        .set_font_size(8)
         .set_bold();
+
+    let fmt_subtitle = Format::new()
+        .set_font_name("游ゴシック")
+        .set_font_size(6);
 
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
@@ -315,11 +319,12 @@ fn generate_scm_excel(
         .set_font_size(6)
         .set_align(FormatAlign::Center);
 
-    // 行の高さ（30mm ≈ 85pt を4行で配分）
-    let row_height_title: f64 = 13.0;
-    let row_height_info: f64 = 10.0;
-    let row_height_barcode: f64 = 50.0;
-    let row_height_text: f64 = 10.0;
+    // 行の高さ（30mm ≈ 85pt を5行で配分）
+    let row_height_title: f64 = 12.0;     // やさいバス
+    let row_height_subtitle: f64 = 10.0;  // カスミ佐倉流通センター 冷蔵 野菜
+    let row_height_info: f64 = 10.0;      // 店番
+    let row_height_barcode: f64 = 42.0;   // バーコード画像
+    let row_height_text: f64 = 9.0;       // バーコード番号
 
     let end_seq = start_seq + count;
 
@@ -342,38 +347,43 @@ fn generate_scm_excel(
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
-        worksheet.set_print_fit_to_pages(1, 1); // 1ページに収める
+        worksheet.set_print_fit_to_pages(1, 1);
         worksheet.set_column_width(0, 22).map_err(|e| format!("{e}"))?;
-        worksheet.set_print_area(0, 0, 3, 0).map_err(|e| format!("{e}"))?;
+        worksheet.set_print_area(0, 0, 4, 0).map_err(|e| format!("{e}"))?;
 
-        // 行1: やさいバス　カスミ佐倉流通センター 冷蔵 野菜
+        // 行1: やさいバス
         worksheet.set_row_height(0, row_height_title).map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(0, 0, "やさいバス カスミ佐倉流通センター 冷蔵 野菜", &fmt_title)
+        worksheet.write_with_format(0, 0, "やさいバス", &fmt_title)
             .map_err(|e| format!("{e}"))?;
 
-        // 行2: 店番・店名（＋納品日）
-        let line2 = if delivery_date.is_empty() {
+        // 行2: カスミ佐倉流通センター 冷蔵 野菜
+        worksheet.set_row_height(1, row_height_subtitle).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(1, 0, "カスミ佐倉流通センター 冷蔵 野菜", &fmt_subtitle)
+            .map_err(|e| format!("{e}"))?;
+
+        // 行3: 店番・店名（＋納品日）
+        let line3 = if delivery_date.is_empty() {
             store_label
         } else {
             format!("{} 納品日:{}", store_label, delivery_date)
         };
-        worksheet.set_row_height(1, row_height_info).map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(1, 0, &line2, &fmt_info)
+        worksheet.set_row_height(2, row_height_info).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(2, 0, &line3, &fmt_info)
             .map_err(|e| format!("{e}"))?;
 
-        // 行3: ITFバーコード画像
+        // 行4: ITFバーコード画像
         let png_data = generate_itf_png(&barcode)
             .map_err(|e| format!("バーコード生成エラー: {e}"))?;
         let barcode_image = Image::new_from_buffer(&png_data)
             .map_err(|e| format!("画像読込エラー: {e}"))?
-            .set_scale_to_size(180.0, 40.0, false);
-        worksheet.set_row_height(2, row_height_barcode).map_err(|e| format!("{e}"))?;
-        worksheet.insert_image(2, 0, &barcode_image)
+            .set_scale_to_size(160.0, 36.0, false);
+        worksheet.set_row_height(3, row_height_barcode).map_err(|e| format!("{e}"))?;
+        worksheet.insert_image(3, 0, &barcode_image)
             .map_err(|e| format!("画像挿入エラー: {e}"))?;
 
-        // 行4: バーコード番号（人間可読テキスト）
-        worksheet.set_row_height(3, row_height_text).map_err(|e| format!("{e}"))?;
-        worksheet.write_with_format(3, 0, &barcode, &fmt_barcode_text)
+        // 行5: バーコード番号（人間可読テキスト）
+        worksheet.set_row_height(4, row_height_text).map_err(|e| format!("{e}"))?;
+        worksheet.write_with_format(4, 0, &barcode, &fmt_barcode_text)
             .map_err(|e| format!("{e}"))?;
     }
 
