@@ -327,11 +327,11 @@ fn generate_scm_excel(
         .set_align(FormatAlign::Center);
 
     // 行の高さ（30mm ≈ 85pt を5行で配分）
-    let row_height_title: f64 = 11.0;     // やさいバス
-    let row_height_subtitle: f64 = 9.0;   // カスミ佐倉流通センター 冷蔵 野菜
-    let row_height_info: f64 = 9.0;       // 店番
-    let row_height_barcode: f64 = 42.0;   // バーコード画像
-    let row_height_text: f64 = 12.0;      // バーコード番号
+    let row_height_title: f64 = 10.0;     // やさいバス
+    let row_height_subtitle: f64 = 8.0;   // カスミ佐倉流通センター 冷蔵 野菜
+    let row_height_info: f64 = 8.0;       // 店番
+    let row_height_barcode: f64 = 38.0;   // バーコード画像
+    let row_height_text: f64 = 10.0;      // バーコード番号
 
     let end_seq = start_seq + count;
 
@@ -383,7 +383,7 @@ fn generate_scm_excel(
             .map_err(|e| format!("バーコード生成エラー: {e}"))?;
         let barcode_image = Image::new_from_buffer(&png_data)
             .map_err(|e| format!("画像読込エラー: {e}"))?
-            .set_scale_to_size(160.0, 36.0, false);
+            .set_scale_to_size(150.0, 30.0, false);
         worksheet.set_row_height(3, row_height_barcode).map_err(|e| format!("{e}"))?;
         worksheet.insert_image(3, 0, &barcode_image)
             .map_err(|e| format!("画像挿入エラー: {e}"))?;
