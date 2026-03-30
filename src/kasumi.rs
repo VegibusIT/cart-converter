@@ -310,12 +310,12 @@ fn generate_scm_excel(
     // フォーマット定義（30×50mmラベル用コンパクトサイズ）
     let fmt_title = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(8)
+        .set_font_size(7)
         .set_bold();
 
     let fmt_subtitle = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(6);
+        .set_font_size(5.5);
 
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
@@ -350,7 +350,7 @@ fn generate_scm_excel(
         worksheet.set_name(&sheet_name).map_err(|e| format!("シート名設定エラー: {e}"))?;
 
         // ページ設定（30×50mmラベル用）
-        worksheet.set_margins(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        worksheet.set_margins(0.1, 0.0, 0.0, 0.0, 0.0, 0.0);
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
