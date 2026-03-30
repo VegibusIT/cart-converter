@@ -225,9 +225,6 @@ fn build_sbpl_label(
     // ラベル開始
     cmd.push(esc); cmd.push(b'A');
 
-    // 漢字コード = Shift-JIS
-    cmd.push(esc); cmd.extend_from_slice(b"KC2");
-
     // 行1: やさいバス (Y=15, X=15)
     cmd.push(esc); cmd.extend_from_slice(b"V0015");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
