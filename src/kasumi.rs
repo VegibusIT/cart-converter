@@ -343,7 +343,7 @@ fn generate_scm_excel(
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
-        worksheet.set_print_fit_to_pages(1, 1);
+        // fit_to_pagesを使わない（拡大されて見切れる原因）
         worksheet.set_column_width(0, 22).map_err(|e| format!("{e}"))?;
         worksheet.set_print_area(0, 0, 4, 0).map_err(|e| format!("{e}"))?;
 
