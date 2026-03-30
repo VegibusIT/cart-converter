@@ -231,46 +231,42 @@ fn build_sbpl_label(
     // 回転なし
     cmd.push(esc); cmd.extend_from_slice(b"%0");
 
-    // 行1: やさいバス (Y=15, X=15) — 24x24漢字、横2倍
+    // 行1: やさいバス (Y=15, X=15) — 24x24漢字+1バイト文字対応
     cmd.push(esc); cmd.extend_from_slice(b"V0015");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"P00");
     cmd.push(esc); cmd.extend_from_slice(b"L0201");
-    cmd.push(esc); cmd.extend_from_slice(b"K2");
+    cmd.push(esc); cmd.extend_from_slice(b"K9");
     cmd.extend_from_slice(&line1_bytes);
     cmd.push(0x0D);
 
-    // 行1b: カスミ佐倉流通センター 冷蔵 野菜 (Y=50, X=15) — 16x16漢字
-    cmd.push(esc); cmd.extend_from_slice(b"V0050");
+    // 行1b: カスミ佐倉流通センター 冷蔵 野菜 (Y=55, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0055");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"P00");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"K1");
+    cmd.push(esc); cmd.extend_from_slice(b"K8");
     cmd.extend_from_slice(&line1b_bytes);
     cmd.push(0x0D);
 
-    // 行2: 店番・店名・納品日 (Y=75, X=15) — 16x16漢字
-    cmd.push(esc); cmd.extend_from_slice(b"V0075");
+    // 行2: 店番・店名・納品日 (Y=80, X=15)
+    cmd.push(esc); cmd.extend_from_slice(b"V0080");
     cmd.push(esc); cmd.extend_from_slice(b"H0015");
-    cmd.push(esc); cmd.extend_from_slice(b"P00");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"K1");
+    cmd.push(esc); cmd.extend_from_slice(b"K8");
     cmd.extend_from_slice(&line2_bytes);
     cmd.push(0x0D);
 
-    // 行3: ITFバーコード (Y=100, X=020) — 比率1:3, ナロー3dot, 高さ120dot
-    cmd.push(esc); cmd.extend_from_slice(b"V0100");
+    // 行3: ITFバーコード (Y=105, X=020)
+    cmd.push(esc); cmd.extend_from_slice(b"V0105");
     cmd.push(esc); cmd.extend_from_slice(b"H0020");
     cmd.push(esc); cmd.extend_from_slice(b"B203120");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
-    // 行4: バーコード番号 (Y=240, X=040) — ASCII
+    // 行4: バーコード番号 (Y=240, X=040)
     cmd.push(esc); cmd.extend_from_slice(b"V0240");
     cmd.push(esc); cmd.extend_from_slice(b"H0040");
-    cmd.push(esc); cmd.extend_from_slice(b"P00");
     cmd.push(esc); cmd.extend_from_slice(b"L0101");
-    cmd.push(esc); cmd.extend_from_slice(b"K1");
+    cmd.push(esc); cmd.extend_from_slice(b"K8");
     cmd.extend_from_slice(barcode.as_bytes());
     cmd.push(0x0D);
 
