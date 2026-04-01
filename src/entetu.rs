@@ -711,39 +711,31 @@ impl EnteTuPage {
 
             if new_count > 0 {
                 ui.label(
-                    egui::RichText::new(format!("未転記: {}件 / 全{}件", new_count, total_count))
+                    egui::RichText::new(format!("未転記: {}件", new_count))
                         .size(14.0)
                         .strong()
                         .color(ACCENT),
                 );
             } else {
                 ui.label(
-                    egui::RichText::new(format!("全{}件 転記済み", total_count))
+                    egui::RichText::new("全ファイル転記済みです")
                         .size(14.0)
                         .color(TEXT_SECONDARY),
                 );
             }
             ui.add_space(4.0);
 
-            // 未転記のみ選択 / 全選択 / 全解除
+            // 全選択 / 全解除
             ui.horizontal(|ui| {
-                if ui.add(
-                    egui::Button::new(egui::RichText::new("未転記を選択").size(11.0).color(ACCENT))
-                        .fill(egui::Color32::TRANSPARENT)
-                        .stroke(egui::Stroke::new(1.0, ACCENT))
-                        .corner_radius(egui::CornerRadius::same(4)),
-                ).clicked() {
-                    for f in &mut self.files {
-                        f.selected = !f.transferred;
-                    }
-                }
                 if ui.add(
                     egui::Button::new(egui::RichText::new("全選択").size(11.0).color(TEXT_SECONDARY))
                         .fill(egui::Color32::TRANSPARENT)
                         .stroke(egui::Stroke::new(1.0, BORDER))
                         .corner_radius(egui::CornerRadius::same(4)),
                 ).clicked() {
-                    for f in &mut self.files { f.selected = true; }
+                    for f in &mut self.files {
+                        if !f.transferred { f.selected = true; }
+                    }
                 }
                 if ui.add(
                     egui::Button::new(egui::RichText::new("全解除").size(11.0).color(TEXT_SECONDARY))
@@ -758,20 +750,16 @@ impl EnteTuPage {
             });
             ui.add_space(4.0);
 
+            // 未転記ファイルのみ表示
             egui::ScrollArea::vertical()
                 .id_salt("source_files")
                 .max_height(200.0)
                 .show(ui, |ui| {
                     for file in &mut self.files {
+                        if file.transferred { continue; }
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut file.selected, "");
-                            let name_color = if file.transferred { TEXT_SECONDARY } else { TEXT_PRIMARY };
-                            ui.label(egui::RichText::new(&file.file.name).size(12.0).color(name_color));
-                            if file.transferred {
-                                ui.label(egui::RichText::new("転記済み").size(10.0).color(TEXT_SECONDARY));
-                            } else {
-                                ui.label(egui::RichText::new("未転記").size(10.0).color(ACCENT));
-                            }
+                            ui.label(egui::RichText::new(&file.file.name).size(12.0).color(TEXT_PRIMARY));
                         });
                     }
                 });
