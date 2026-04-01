@@ -659,7 +659,7 @@ dependencies = [
 
 [[package]]
 name = "cart-converter"
-version = "2.5.3"
+version = "2.5.4"
 dependencies = [
  "calamine",
  "eframe",

@@ -295,9 +295,35 @@ fn is_already_transferred(file_name: &str, existing_dates: &HashSet<String>) -> 
         return false;
     }
     // 全日付が転記先に存在していれば転記済みと判定
+    // Google Sheetsの自動フォーマットで "03月" → "3月" になる場合があるため両方チェック
     dates.iter().all(|d| {
-        existing_dates.iter().any(|existing| existing.contains(d))
+        let d_no_pad = d.replace("0", ""); // "03月08日" → "3月8日" (簡易)
+        let d_trimmed = trim_leading_zero_date(d); // "03月08日" → "3月8日"
+        existing_dates.iter().any(|existing| {
+            existing.contains(d) || existing.contains(&d_trimmed) || existing.contains(&d_no_pad)
+        })
     })
+}
+
+/// "03月08日" → "3月08日", "03月30日" → "3月30日" のように月の先頭0を除去
+fn trim_leading_zero_date(date: &str) -> String {
+    if let Some(m_pos) = date.find('月') {
+        let month_part = &date[..m_pos];
+        let rest = &date[m_pos..];
+        let month_trimmed = month_part.trim_start_matches('0');
+        // 日の部分も先頭0除去
+        if let Some(d_start) = rest.find('月') {
+            let after_month = &rest[d_start + "月".len()..];
+            if let Some(d_pos) = after_month.find('日') {
+                let day_part = &after_month[..d_pos];
+                let day_trimmed = day_part.trim_start_matches('0');
+                return format!("{}月{}日", month_trimmed, day_trimmed);
+            }
+        }
+        format!("{}{}", month_trimmed, rest)
+    } else {
+        date.to_string()
+    }
 }
 
 /// ファイル名から日付部分を抽出
@@ -968,13 +994,18 @@ impl EnteTuPage {
             kind: LogKind::Info,
         });
 
+        // 転記先の既存日付を店舗別に取得（重複書き込み防止）
+        let (kikugawa_dates, mori_dates) = self.load_existing_dates(&token);
+
         let total = selected.len();
         let mut total_kikugawa = 0usize;
         let mut total_mori = 0usize;
+        let mut skipped_kikugawa = 0usize;
+        let mut skipped_mori = 0usize;
         let mut errors = 0usize;
         let mut newly_transferred: Vec<String> = Vec::new();
 
-        // 全ファイルのデータを先に集める
+        // 全ファイルのデータを先に集める（店舗別に重複チェック）
         let mut all_kikugawa: Vec<Vec<String>> = Vec::new();
         let mut all_mori: Vec<Vec<String>> = Vec::new();
 
@@ -984,6 +1015,10 @@ impl EnteTuPage {
                 kind: LogKind::Info,
             });
 
+            // このファイルの日付が既に各店舗に存在するかチェック
+            let kikugawa_exists = is_already_transferred(&file.name, &kikugawa_dates);
+            let mori_exists = is_already_transferred(&file.name, &mori_dates);
+
             match download_drive_file(&token, &file.id) {
                 Ok(data) => {
                     match parse_excel_file(&data, &file.name) {
@@ -991,19 +1026,41 @@ impl EnteTuPage {
                             let k_count = transfer_data.kikugawa_rows.len();
                             let m_count = transfer_data.mori_rows.len();
 
-                            for row in &transfer_data.kikugawa_rows {
-                                all_kikugawa.push(row.to_vec());
-                            }
-                            for row in &transfer_data.mori_rows {
-                                all_mori.push(row.to_vec());
+                            // 菊川店: 未転記の場合のみ追加
+                            if !kikugawa_exists {
+                                for row in &transfer_data.kikugawa_rows {
+                                    all_kikugawa.push(row.to_vec());
+                                }
+                                total_kikugawa += k_count;
+                            } else if k_count > 0 {
+                                skipped_kikugawa += k_count;
                             }
 
-                            total_kikugawa += k_count;
-                            total_mori += m_count;
+                            // 森店: 未転記の場合のみ追加
+                            if !mori_exists {
+                                for row in &transfer_data.mori_rows {
+                                    all_mori.push(row.to_vec());
+                                }
+                                total_mori += m_count;
+                            } else if m_count > 0 {
+                                skipped_mori += m_count;
+                            }
+
                             newly_transferred.push(file.id.clone());
 
+                            let mut detail = Vec::new();
+                            if !kikugawa_exists && k_count > 0 {
+                                detail.push(format!("菊川店: {}行", k_count));
+                            } else if kikugawa_exists && k_count > 0 {
+                                detail.push(format!("菊川店: 転記済みスキップ"));
+                            }
+                            if !mori_exists && m_count > 0 {
+                                detail.push(format!("森店: {}行", m_count));
+                            } else if mori_exists && m_count > 0 {
+                                detail.push(format!("森店: 転記済みスキップ"));
+                            }
                             self.log.push(LogEntry {
-                                text: format!("    菊川店: {}行, 森店: {}行", k_count, m_count),
+                                text: format!("    {}", detail.join(", ")),
                                 kind: LogKind::Ok,
                             });
                         }
@@ -1118,11 +1175,15 @@ impl EnteTuPage {
         self.progress = 1.0;
         self.is_processing = false;
 
+        let mut summary = format!("完了 -- 菊川店: {}行, 森店: {}行", total_kikugawa, total_mori);
+        if skipped_kikugawa > 0 || skipped_mori > 0 {
+            summary.push_str(&format!(", スキップ（菊川: {}, 森: {}）", skipped_kikugawa, skipped_mori));
+        }
+        if errors > 0 {
+            summary.push_str(&format!(", エラー: {}件", errors));
+        }
         self.log.push(LogEntry {
-            text: format!(
-                "完了 -- 菊川店: {}行, 森店: {}行, エラー: {}件",
-                total_kikugawa, total_mori, errors
-            ),
+            text: summary,
             kind: if errors == 0 { LogKind::Done } else { LogKind::Error },
         });
     }
