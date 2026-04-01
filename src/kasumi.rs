@@ -299,28 +299,28 @@ fn generate_scm_excel(
     // フォーマット定義（30×50mmラベル用コンパクトサイズ）
     let fmt_title = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(5.5)
+        .set_font_size(7)
         .set_bold();
 
     let fmt_subtitle = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(5.5);
+        .set_font_size(6);
 
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(5.5);
+        .set_font_size(6);
 
     let fmt_barcode_text = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(5.5)
+        .set_font_size(6)
         .set_align(FormatAlign::Center);
 
     // 行の高さ（30mm ≈ 85pt を5行で配分）
-    let row_height_title: f64 = 8.0;      // やさいバス
-    let row_height_subtitle: f64 = 8.0;   // カスミ佐倉流通センター 冷蔵 野菜
-    let row_height_info: f64 = 8.0;       // 店番
-    let row_height_barcode: f64 = 36.0;   // バーコード画像
-    let row_height_text: f64 = 8.0;       // バーコード番号
+    let row_height_title: f64 = 10.0;     // やさいバス
+    let row_height_subtitle: f64 = 9.0;   // カスミ佐倉流通センター 冷蔵 野菜
+    let row_height_info: f64 = 9.0;       // 店番
+    let row_height_barcode: f64 = 32.0;   // バーコード画像
+    let row_height_text: f64 = 9.0;       // バーコード番号
 
     let end_seq = start_seq + count;
 
@@ -339,7 +339,7 @@ fn generate_scm_excel(
         worksheet.set_name(&sheet_name).map_err(|e| format!("シート名設定エラー: {e}"))?;
 
         // ページ設定（30×50mmラベル用）
-        worksheet.set_margins(0.2, 0.0, 0.0, 0.0, 0.0, 0.0);
+        worksheet.set_margins(0.25, 0.0, 0.0, 0.0, 0.0, 0.0);
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
@@ -372,7 +372,7 @@ fn generate_scm_excel(
             .map_err(|e| format!("バーコード生成エラー: {e}"))?;
         let barcode_image = Image::new_from_buffer(&png_data)
             .map_err(|e| format!("画像読込エラー: {e}"))?
-            .set_scale_to_size(150.0, 30.0, false);
+            .set_scale_to_size(145.0, 26.0, false);
         worksheet.set_row_height(3, row_height_barcode).map_err(|e| format!("{e}"))?;
         worksheet.insert_image(3, 0, &barcode_image)
             .map_err(|e| format!("画像挿入エラー: {e}"))?;
