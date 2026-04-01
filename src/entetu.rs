@@ -12,36 +12,50 @@ const TARGET_SPREADSHEET_ID: &str = "1ga0RZkj9-LG75W4fqXWHaTLJhTOdzORSD03-7z5qwU
 
 // --- Google API ヘルパー ---
 
-/// Drive フォルダ内のファイル一覧を取得
+/// Drive フォルダ内のファイル一覧を取得（ページネーション対応）
 fn list_drive_files(token: &str, folder_id: &str) -> Result<Vec<DriveFile>, String> {
     let query = format!("'{}' in parents and trashed = false", folder_id);
-    let url = format!(
-        "https://www.googleapis.com/drive/v3/files?q={}&fields=files(id,name,mimeType,modifiedTime)&orderBy=name desc&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true",
-        urlencoding::encode(&query)
-    );
-    let resp = ureq::get(&url)
-        .set("Authorization", &format!("Bearer {}", token))
-        .call()
-        .map_err(|e| format!("Drive API呼び出し失敗: {e}"))?;
+    let mut all_files = Vec::new();
+    let mut page_token: Option<String> = None;
 
-    let raw = resp.into_string().map_err(|e| format!("レスポンス読み取り失敗: {e}"))?;
-    let json: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|e| format!("JSON解析失敗: {e}"))?;
-    let files = json["files"]
-        .as_array()
-        .ok_or_else(|| format!("filesフィールドがありません: {}", raw))?;
+    loop {
+        let mut url = format!(
+            "https://www.googleapis.com/drive/v3/files?q={}&fields=nextPageToken,files(id,name,mimeType,modifiedTime)&orderBy=modifiedTime desc&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true",
+            urlencoding::encode(&query)
+        );
+        if let Some(ref pt) = page_token {
+            url.push_str(&format!("&pageToken={}", urlencoding::encode(pt)));
+        }
 
-    Ok(files
-        .iter()
-        .filter_map(|f| {
+        let resp = ureq::get(&url)
+            .set("Authorization", &format!("Bearer {}", token))
+            .call()
+            .map_err(|e| format!("Drive API呼び出し失敗: {e}"))?;
+
+        let raw = resp.into_string().map_err(|e| format!("レスポンス読み取り失敗: {e}"))?;
+        let json: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| format!("JSON解析失敗: {e}"))?;
+        let files = json["files"]
+            .as_array()
+            .ok_or_else(|| format!("filesフィールドがありません: {}", raw))?;
+
+        all_files.extend(files.iter().filter_map(|f| {
             Some(DriveFile {
                 id: f["id"].as_str()?.to_string(),
                 name: f["name"].as_str()?.to_string(),
                 mime_type: f["mimeType"].as_str()?.to_string(),
                 modified_time: f["modifiedTime"].as_str().unwrap_or("").to_string(),
             })
-        })
-        .collect())
+        }));
+
+        // 次のページがあれば続行
+        match json["nextPageToken"].as_str() {
+            Some(token) if !token.is_empty() => page_token = Some(token.to_string()),
+            _ => break,
+        }
+    }
+
+    Ok(all_files)
 }
 
 /// Drive からファイルをダウンロード
