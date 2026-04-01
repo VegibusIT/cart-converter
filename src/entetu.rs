@@ -344,7 +344,7 @@ fn extract_year_month(date: &str) -> String {
         if let Some(m_pos) = date.find('月') {
             let year = &date[..y_pos];
             let month = &date[y_pos + "年".len()..m_pos];
-            return format!("{}{}", year, month.trim_start_matches('0'));
+            return format!("{}{:0>2}", year, month.trim_start_matches('0'));
         }
     }
     String::new()
@@ -830,9 +830,9 @@ impl EnteTuPage {
 
         // 転記先シートの既存日付を取得して重複チェック用セットを構築
         self.log.push(LogEntry { text: "転記先の既存データを確認中...".into(), kind: LogKind::Info });
-        let existing_dates = self.load_existing_dates(&token);
+        let (kikugawa_dates, mori_dates) = self.load_existing_dates(&token);
         self.log.push(LogEntry {
-            text: format!("転記先に{}件の日付データを確認", existing_dates.len()),
+            text: format!("転記先: 菊川店{}件, 森店{}件の日付データを確認", kikugawa_dates.len(), mori_dates.len()),
             kind: LogKind::Ok,
         });
 
@@ -855,14 +855,19 @@ impl EnteTuPage {
                 self.files = xlsx_files
                     .into_iter()
                     .map(|f| {
-                        // Sheetに日付データが存在する場合のみ転記済みとする
-                        // （Sheetからデータを削除すれば再転記可能）
-                        let in_sheet = is_already_transferred(&f.name, &existing_dates);
-                        let transferred = in_sheet;
+                        // やさいバスファイルは菊川店のみ、それ以外は両店チェック
+                        let is_yasaibus = f.name.contains("やさいバス");
+                        let in_kikugawa = is_already_transferred(&f.name, &kikugawa_dates);
+                        let in_mori = is_already_transferred(&f.name, &mori_dates);
+                        let transferred = if is_yasaibus {
+                            in_kikugawa
+                        } else {
+                            in_kikugawa && in_mori
+                        };
                         // ローカル記録をSheetの実態に合わせて同期
-                        if in_sheet && !self.transferred_ids.contains(&f.id) {
+                        if transferred && !self.transferred_ids.contains(&f.id) {
                             self.transferred_ids.insert(f.id.clone());
-                        } else if !in_sheet && self.transferred_ids.contains(&f.id) {
+                        } else if !transferred && self.transferred_ids.contains(&f.id) {
                             self.transferred_ids.remove(&f.id);
                         }
                         DisplayFile { file: f, transferred, selected: false }
@@ -904,9 +909,11 @@ impl EnteTuPage {
     }
 
     /// 転記先シートの既存日付を読み取る（B列＝日付）
-    fn load_existing_dates(&self, token: &str) -> HashSet<String> {
-        let mut dates = HashSet::new();
-        for sheet in &["菊川店", "森店"] {
+    /// 菊川店・森店を別々のセットで返す
+    fn load_existing_dates(&self, token: &str) -> (HashSet<String>, HashSet<String>) {
+        let mut kikugawa_dates = HashSet::new();
+        let mut mori_dates = HashSet::new();
+        for (sheet, dates) in [("菊川店", &mut kikugawa_dates), ("森店", &mut mori_dates)] {
             let range = format!("{}!B:B", sheet);
             let url = format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
@@ -930,7 +937,7 @@ impl EnteTuPage {
                 }
             }
         }
-        dates
+        (kikugawa_dates, mori_dates)
     }
 
     fn run_transfer(&mut self) {
