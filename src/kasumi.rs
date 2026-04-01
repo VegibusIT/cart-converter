@@ -339,7 +339,7 @@ fn generate_scm_excel(
         worksheet.set_name(&sheet_name).map_err(|e| format!("シート名設定エラー: {e}"))?;
 
         // ページ設定（30×50mmラベル用）
-        worksheet.set_margins(0.25, 0.0, 0.0, 0.0, 0.0, 0.0);
+        worksheet.set_margins(0.4, 0.0, 0.0, 0.0, 0.0, 0.0);
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
