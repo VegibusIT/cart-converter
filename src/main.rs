@@ -7,6 +7,7 @@ mod convert;
 mod entetu;
 mod google_auth;
 mod kasumi;
+mod moneyforward;
 mod printer;
 mod style;
 mod updater;
@@ -21,6 +22,7 @@ enum Page {
     EnteTu,
     Aeon,
     Kasumi,
+    MoneyForward,
 }
 
 struct App {
@@ -29,6 +31,7 @@ struct App {
     entetu: entetu::EnteTuPage,
     aeon: aeon::AeonPage,
     kasumi: kasumi::KasumiPage,
+    moneyforward: moneyforward::MoneyForwardPage,
 
     // バージョン管理
     releases: Vec<updater::ReleaseInfo>,
@@ -51,6 +54,7 @@ impl Default for App {
             entetu: entetu::EnteTuPage::default(),
             aeon: aeon::AeonPage::default(),
             kasumi: kasumi::KasumiPage::default(),
+            moneyforward: moneyforward::MoneyForwardPage::default(),
             releases: Vec::new(),
             releases_loaded: false,
             releases_error: None,
@@ -289,6 +293,7 @@ impl eframe::App for App {
                         Page::EnteTu => "遠鉄ストア消化仕入れ",
                         Page::Aeon => "イオン近畿 生鮮MD",
                         Page::Kasumi => "カスミ SCMラベル",
+                        Page::MoneyForward => "MoneyForward変換",
                     };
                     ui.label(
                         egui::RichText::new(subtitle)
@@ -318,6 +323,11 @@ impl eframe::App for App {
             }
             Page::Kasumi => {
                 if self.kasumi.show(ctx) {
+                    self.page = Page::Top;
+                }
+            }
+            Page::MoneyForward => {
+                if self.moneyforward.show(ctx) {
                     self.page = Page::Top;
                 }
             }
@@ -400,6 +410,19 @@ impl App {
                     "カスミ佐倉流通センター納品用の26桁SCMバーコードラベルを生成します",
                 ) {
                     self.page = Page::Kasumi;
+                }
+
+                ui.add_space(12.0);
+
+                // MoneyForward変換
+                if self.show_tool_card(
+                    ui,
+                    ctx,
+                    card_width,
+                    "MoneyForward 生産者入金データ変換",
+                    "生産者手取り額（Excel）からMoneyForwardインポート用CSVを生成します",
+                ) {
+                    self.page = Page::MoneyForward;
                 }
 
                 // バージョン管理セクション（画面下部）
