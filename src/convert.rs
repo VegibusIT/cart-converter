@@ -307,11 +307,21 @@ fn get_date_headers(workbook_path: &Path, mapping: &ColumnMapping) -> Result<Vec
 pub fn write_cart_file(
     workbook_path: &Path,
     sheet_name: &str,
-    date_headers: &[String],
+    _date_headers: &[String],
     output_path: &Path,
     mapping: &ColumnMapping,
 ) -> Result<usize, String> {
     let products = read_store_sheet(workbook_path, sheet_name, mapping)?;
+
+    // 各シートから日付ヘッダーを読み取る（シートごとに列配置が異なる場合があるため）
+    let date_headers = {
+        let mut wb: Xlsx<_> =
+            open_workbook(workbook_path).map_err(|e| format!("ファイルを開けません: {e}"))?;
+        let range = wb
+            .worksheet_range(sheet_name)
+            .map_err(|e| format!("シート '{sheet_name}' を開けません: {e}"))?;
+        read_date_headers(&range, mapping)
+    };
 
     let mut wb = Workbook::new();
     let ws = wb.add_worksheet().set_name("list").map_err(|e| e.to_string())?;
@@ -325,7 +335,7 @@ pub fn write_cart_file(
     // O-U列 (index 14-20): 日付ヘッダー
     for (j, date) in date_headers.iter().enumerate() {
         if !date.is_empty() {
-            ws.write_string(3, (14 + j) as u16, date).map_err(|e| e.to_string())?;
+            ws.write_string(3, (14 + j) as u16, date.as_str()).map_err(|e| e.to_string())?;
         }
     }
 
