@@ -306,9 +306,11 @@ fn generate_scm_excel(
         .set_font_name("游ゴシック")
         .set_font_size(6);
 
+    // 店番は目視仕分け用に最も目立たせる（やさいバスより大きく・太字）
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(6);
+        .set_font_size(9)
+        .set_bold();
 
     let fmt_barcode_text = Format::new()
         .set_font_name("游ゴシック")
@@ -318,8 +320,8 @@ fn generate_scm_excel(
     // 行の高さ（30mm ≈ 85pt を5行で配分）
     let row_height_title: f64 = 10.0;     // やさいバス
     let row_height_subtitle: f64 = 9.0;   // カスミ佐倉流通センター 冷蔵 野菜
-    let row_height_info: f64 = 9.0;       // 店番
-    let row_height_barcode: f64 = 32.0;   // バーコード画像
+    let row_height_info: f64 = 13.0;      // 店番（9pt太字に拡大）
+    let row_height_barcode: f64 = 28.0;   // バーコード画像（画像高26ptは不変、余白分のみ縮小）
     let row_height_text: f64 = 9.0;       // バーコード番号
 
     let end_seq = start_seq + count;
