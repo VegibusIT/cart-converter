@@ -297,32 +297,39 @@ fn generate_scm_excel(
     let mut workbook = Workbook::new();
 
     // フォーマット定義（30×50mmラベル用コンパクトサイズ）
+    // 全行を上下中央寄せ（VerticalCenter）にする。既定の下寄せだと游ゴシックの
+    // 行高が大きいため文字の上部が行外にはみ出して印刷時に切れていた。
     let fmt_title = Format::new()
         .set_font_name("游ゴシック")
         .set_font_size(7)
-        .set_bold();
+        .set_bold()
+        .set_align(FormatAlign::VerticalCenter);
 
     let fmt_subtitle = Format::new()
         .set_font_name("游ゴシック")
-        .set_font_size(6);
+        .set_font_size(6)
+        .set_align(FormatAlign::VerticalCenter);
 
     // 店番は目視仕分け用に最も目立たせる（やさいバスより大きく・太字）
     let fmt_info = Format::new()
         .set_font_name("游ゴシック")
         .set_font_size(9)
-        .set_bold();
+        .set_bold()
+        .set_align(FormatAlign::VerticalCenter);
 
     let fmt_barcode_text = Format::new()
         .set_font_name("游ゴシック")
         .set_font_size(6)
-        .set_align(FormatAlign::Center);
+        .set_align(FormatAlign::Center)
+        .set_align(FormatAlign::VerticalCenter);
 
-    // 行の高さ（30mm ≈ 85pt を5行で配分）
-    let row_height_title: f64 = 10.0;     // やさいバス
-    let row_height_subtitle: f64 = 9.0;   // カスミ佐倉流通センター 冷蔵 野菜
-    let row_height_info: f64 = 13.0;      // 店番（9pt太字に拡大）
-    let row_height_barcode: f64 = 28.0;   // バーコード画像（画像高26ptは不変、余白分のみ縮小）
-    let row_height_text: f64 = 9.0;       // バーコード番号
+    // 行の高さ（30mm ≈ 85pt を5行で配分）。各行とも游ゴシックの実寸より少し余裕を持たせ、
+    // 上下中央寄せと合わせて文字が行内に収まる（＝上部が切れない）ようにする。
+    let row_height_title: f64 = 11.0;     // やさいバス
+    let row_height_subtitle: f64 = 10.0;  // カスミ佐倉流通センター 冷蔵 野菜
+    let row_height_info: f64 = 14.0;      // 店番（9pt太字に拡大）
+    let row_height_barcode: f64 = 28.0;   // バーコード画像（画像高26ptは不変）
+    let row_height_text: f64 = 10.0;      // バーコード番号
 
     let end_seq = start_seq + count;
 
@@ -341,7 +348,9 @@ fn generate_scm_excel(
         worksheet.set_name(&sheet_name).map_err(|e| format!("シート名設定エラー: {e}"))?;
 
         // ページ設定（30×50mmラベル用）
-        worksheet.set_margins(0.4, 0.0, 0.0, 0.0, 0.0, 0.0);
+        // 引数は (左, 右, 上, 下, ヘッダ, フッタ)。上余白を0.08インチ確保して
+        // ラベル先端（リード部）での上部切れを防ぎ、内容を少し下げて中央寄りにする。
+        worksheet.set_margins(0.4, 0.0, 0.08, 0.0, 0.0, 0.0);
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
