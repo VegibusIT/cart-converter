@@ -323,13 +323,15 @@ fn generate_scm_excel(
         .set_align(FormatAlign::Center)
         .set_align(FormatAlign::VerticalCenter);
 
-    // 行の高さ（30mm ≈ 85pt を5行で配分）。各行とも游ゴシックの実寸より少し余裕を持たせ、
-    // 上下中央寄せと合わせて文字が行内に収まる（＝上部が切れない）ようにする。
-    let row_height_title: f64 = 11.0;     // やさいバス
-    let row_height_subtitle: f64 = 10.0;  // カスミ佐倉流通センター 冷蔵 野菜
-    let row_height_info: f64 = 14.0;      // 店番（9pt太字に拡大）
-    let row_height_barcode: f64 = 28.0;   // バーコード画像（画像高26ptは不変）
-    let row_height_text: f64 = 10.0;      // バーコード番号
+    // 行の高さ。合計が増えると最終行(番号)が次ラベルへ改ページされてあふれるため、
+    // 収まる実績のある合計69ptに固定する。上下中央寄せ(VerticalCenter)と組み合わせ、
+    // 行高を増やさずに文字上部の切れを防ぐ。切れやすい細字の①やさいバス・②カスミ行は
+    // 余裕のある③店番・④バーコード行から融通して高さを確保する（合計は69ptで不変）。
+    let row_height_title: f64 = 11.0;     // やさいバス（細字対策で確保）
+    let row_height_subtitle: f64 = 10.0;  // カスミ佐倉流通センター 冷蔵 野菜（細字対策で確保）
+    let row_height_info: f64 = 13.0;      // 店番（9pt太字、中央寄せで余裕あり）
+    let row_height_barcode: f64 = 26.0;   // バーコード画像（画像高26pt、上2行へ融通）
+    let row_height_text: f64 = 9.0;       // バーコード番号
 
     let end_seq = start_seq + count;
 
@@ -348,9 +350,10 @@ fn generate_scm_excel(
         worksheet.set_name(&sheet_name).map_err(|e| format!("シート名設定エラー: {e}"))?;
 
         // ページ設定（30×50mmラベル用）
-        // 引数は (左, 右, 上, 下, ヘッダ, フッタ)。上余白を0.08インチ確保して
-        // ラベル先端（リード部）での上部切れを防ぎ、内容を少し下げて中央寄りにする。
-        worksheet.set_margins(0.4, 0.0, 0.08, 0.0, 0.0, 0.0);
+        // 引数は (左, 右, 上, 下, ヘッダ, フッタ)。上余白を足すと内容全体が下がり、
+        // 最終行(バーコード番号)がラベル下端を越えて次ラベルへ改ページされてしまうため、
+        // 上余白は0に戻す。文字の上部切れは行の上下中央寄せ(VerticalCenter)で解消済み。
+        worksheet.set_margins(0.4, 0.0, 0.0, 0.0, 0.0, 0.0);
         worksheet.set_header("");
         worksheet.set_footer("");
         worksheet.set_portrait();
